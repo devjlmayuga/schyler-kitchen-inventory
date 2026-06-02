@@ -193,9 +193,9 @@ export default function Layout({ children }) {
             aria-label="Home"
           >
             <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[linear-gradient(135deg,rgba(229,84,102,0.18),rgba(224,51,72,0.10))]">
-              <img src="/favicon.svg" alt="Takoyaki Ops" className="h-7 w-7" />
+              <img src="/favicon.svg" alt="Schyer Kitchen" className="h-7 w-7" />
             </span>
-            <span className="text-sm font-extrabold tracking-tight text-slate-900">Takoyaki Ops</span>
+            <span className="text-sm font-extrabold tracking-tight text-slate-900">Schyer Kitchen</span>
           </button>
           <button
             type="button"
