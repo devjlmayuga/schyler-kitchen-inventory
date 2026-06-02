@@ -1,0 +1,5 @@
+node_modules
+.DS_Store
+
+# Secrets / credentials
+sandbox-jl-498113-809922f5abce.json

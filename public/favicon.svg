@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E55466"/>
+      <stop offset="0.55" stop-color="#E03348"/>
+      <stop offset="1" stop-color="#C50018"/>
+    </linearGradient>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#8E0006" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#g)"/>
+  <!-- "takoyaki ball" cluster -->
+  <g filter="url(#s)">
+    <circle cx="24" cy="26" r="7.5" fill="#F3B0B8"/>
+    <circle cx="40" cy="26" r="7.5" fill="#F3B0B8"/>
+    <circle cx="32" cy="39" r="8.5" fill="#F3B0B8"/>
+    <circle cx="24" cy="26" r="3" fill="#8E0006" fill-opacity="0.25"/>
+    <circle cx="40" cy="26" r="3" fill="#8E0006" fill-opacity="0.25"/>
+    <circle cx="32" cy="39" r="3.2" fill="#8E0006" fill-opacity="0.25"/>
+  </g>
+  <!-- small skewer line -->
+  <path d="M16 48 L48 34" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round"/>
+</svg>
+

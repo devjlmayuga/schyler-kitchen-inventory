@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* Palette (from design): */
+    --p-1: #f3b0b8;
+    --p-2: #e55466;
+    --p-3: #e03348;
+    --p-4: #c50018;
+    --p-5: #8e0006;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply text-slate-900 antialiased;
+    @apply overflow-x-hidden;
+    background: linear-gradient(180deg, #f5f6fa 0%, #eef1f6 100%);
+  }
+}
+
+@layer components {
+  /* Map existing md-* tokens to CoreUI-ish primitives so pages keep working */
+  .md-surface {
+    @apply bg-white;
+  }
+
+  .md-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .md-card-elevated {
+    @apply rounded-2xl border border-slate-200 bg-white shadow;
+  }
+
+  .md-chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700;
+  }
+
+  .md-badge-warn {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold;
+    background: rgba(243, 176, 184, 0.5);
+    color: var(--p-5);
+  }
+
+  .md-badge-danger {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold;
+    background: rgba(224, 51, 72, 0.12);
+    color: var(--p-5);
+  }
+
+  .md-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2;
+    @apply disabled:pointer-events-none disabled:opacity-60;
+  }
+
+  .md-btn-primary {
+    @apply text-white;
+    background: var(--p-3);
+  }
+
+  .md-btn-primary:hover {
+    background: var(--p-4);
+  }
+
+  .md-btn-tonal {
+    @apply bg-slate-100 text-slate-800 hover:bg-slate-200;
+  }
+
+  .md-btn-outline {
+    @apply border border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+  }
+
+  .md-btn-ghost {
+    @apply bg-transparent text-slate-700 hover:bg-white/70;
+  }
+
+  .md-field {
+    @apply block space-y-1;
+  }
+
+  .md-label {
+    @apply text-xs font-semibold text-slate-600;
+  }
+
+  .md-input {
+    @apply h-[42px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm;
+    @apply focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-200;
+  }
+
+  .md-select {
+    @apply h-[42px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm;
+    @apply focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-200;
+  }
+
+  .md-table-wrap {
+    @apply overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .md-table-head {
+    @apply bg-slate-50 text-slate-700;
+  }
+
+  /* POS/Dashboard shell helpers */
+  .md-shell {
+    @apply min-h-dvh;
+  }
+
+  .md-sidebar {
+    @apply h-dvh w-72 border-r border-slate-200 bg-white;
+  }
+
+  .md-topbar {
+    @apply sticky top-0 z-10 border-b border-slate-200 bg-white;
+  }
+
+  .md-navitem {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition;
+    @apply hover:bg-white/70;
+  }
+
+  .md-navitem-active {
+    background: rgba(224, 51, 72, 0.10);
+    color: var(--p-5);
+  }
+}
