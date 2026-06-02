@@ -21,7 +21,14 @@ function Stat({ label, value }) {
   );
 }
 
-function buildSalesExportText({ date, salesValue, breakdownFields, breakdownValues, staffList, staffExpenses, calc, productSales }) {
+const OTHER_EXPENSES_REMARK_KEY = 'Other_Expenses_Remark';
+
+function isOtherExpenseField(field) {
+  const text = `${field?.label || ''} ${field?.key || ''}`.toLowerCase();
+  return text.includes('other');
+}
+
+function buildSalesExportText({ date, salesValue, breakdownFields, breakdownValues, otherExpensesRemark, staffList, staffExpenses, calc, productSales }) {
   const lines = [];
   lines.push(`Sales & Ledger - ${date}`);
   lines.push('');
@@ -43,6 +50,9 @@ function buildSalesExportText({ date, salesValue, breakdownFields, breakdownValu
     const v = parseMoney(breakdownValues?.[f.key]);
     lines.push(`- ${f.label || f.key}: ${formatMoney(v)}`);
   });
+  if (breakdownFields.some(isOtherExpenseField) && String(otherExpensesRemark || '').trim()) {
+    lines.push(`- Other Expenses Remark: ${String(otherExpensesRemark).trim()}`);
+  }
   if (Array.isArray(staffList) && staffList.length) {
     const anyStaff = staffList.some((name) => parseMoney(staffExpenses?.[name]) > 0);
     if (anyStaff) {
@@ -84,6 +94,7 @@ export default function SalesPage() {
   const [date, setDate] = useState(isoDateToday());
   const [sales, setSales] = useState('');
   const [breakdownValues, setBreakdownValues] = useState({});
+  const [otherExpensesRemark, setOtherExpensesRemark] = useState('');
   const [addCash, setAddCash] = useState('');
   const [staff, setStaff] = useState('');
   const [staffExpenses, setStaffExpenses] = useState({});
@@ -142,6 +153,8 @@ export default function SalesPage() {
     const fields = Array.isArray(config.expenseBreakdown) ? config.expenseBreakdown : [];
     return fields.length ? fields : DEFAULT_SALES_CONFIG.expenseBreakdown;
   }, [config.expenseBreakdown]);
+
+  const hasOtherExpenses = useMemo(() => breakdownFields.some(isOtherExpenseField), [breakdownFields]);
 
   useEffect(() => {
     setBreakdownValues((prev) => {
@@ -215,6 +228,7 @@ export default function SalesPage() {
       if (!row) {
         setSales('');
         setBreakdownValues(() => Object.fromEntries(fields.map((f) => [f.key, ''])));
+        setOtherExpensesRemark('');
         setSoldQtyByName({});
         setAddCash('');
         setStaff('');
@@ -223,6 +237,7 @@ export default function SalesPage() {
       }
       setSales(String(row.Takoyaki_Sales ?? ''));
       setBreakdownValues(() => Object.fromEntries(fields.map((f) => [f.key, String(row?.[f.key] ?? '')])));
+      setOtherExpensesRemark(String(row?.[OTHER_EXPENSES_REMARK_KEY] ?? ''));
       setAddCash(String(row.Previous_Cash_Added ?? ''));
       setStaff(String(row.Staff ?? ''));
       const rawProducts = row.Product_Sales_JSON;
@@ -298,6 +313,7 @@ export default function SalesPage() {
         row: {
           Takoyaki_Sales: calc.takoyakiSales,
           ...breakdownNumbers,
+          [OTHER_EXPENSES_REMARK_KEY]: hasOtherExpenses ? otherExpensesRemark : '',
           Previous_Cash_Added: calc.previousCashAdded,
           Staff: staff,
           Staff_Expenses_JSON: Object.keys(staffMap).length ? JSON.stringify(staffMap) : '',
@@ -361,6 +377,7 @@ export default function SalesPage() {
       salesValue: sales,
       breakdownFields,
       breakdownValues,
+      otherExpensesRemark,
       staffList: Array.isArray(config.staff) ? config.staff : [],
       staffExpenses,
       calc,
@@ -504,6 +521,16 @@ export default function SalesPage() {
                     inputMode="decimal"
                   />
                 ))}
+                {hasOtherExpenses ? (
+                  <div className="sm:col-span-2">
+                    <TextInput
+                      label="Other Expenses Remark"
+                      value={otherExpensesRemark}
+                      onChange={setOtherExpensesRemark}
+                      placeholder="Add details for other expenses"
+                    />
+                  </div>
+                ) : null}
               </div>
               </div>
 

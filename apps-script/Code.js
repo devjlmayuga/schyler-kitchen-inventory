@@ -14,6 +14,7 @@
 const SHEET_INVENTORY = 'Inventory';
 const SHEET_INV_HISTORY = 'Inventory_History';
 const SHEET_SALES = 'Sales_Finance';
+const OTHER_EXPENSES_REMARK_KEY = 'Other_Expenses_Remark';
 const SHEET_NEEDS = 'Needs_Replenish';
 const SHEET_CONFIG = 'Config';
 const SHEET_USERS = 'Users';
@@ -592,7 +593,7 @@ function salesFinanceUpsertByDate({ date, row }) {
       .filter((k) => k);
     ensureHeaders(
       sheet,
-      breakdownKeys.concat(['Staff_Expenses_JSON', 'Staff_Expenses_Total', 'Product_Sales_JSON', 'Product_Sales_Total']),
+      breakdownKeys.concat([OTHER_EXPENSES_REMARK_KEY, 'Staff_Expenses_JSON', 'Staff_Expenses_Total', 'Product_Sales_JSON', 'Product_Sales_Total']),
     );
     const data = readSheetAsObjects(sheet);
 
@@ -623,6 +624,7 @@ function salesFinanceUpsertByDate({ date, row }) {
     breakdownKeys.forEach((k) => {
       normalized[k] = toNumber(row[k]);
     });
+    normalized[OTHER_EXPENSES_REMARK_KEY] = String(row[OTHER_EXPENSES_REMARK_KEY] || '').trim();
     if (row.Staff != null) normalized.Staff = String(row.Staff);
     if (staffExpenses.json) normalized.Staff_Expenses_JSON = staffExpenses.json;
     normalized.Staff_Expenses_Total = staffExpenses.total;
@@ -686,6 +688,7 @@ function normalizeSalesRow(r) {
   if (out.Staff != null) out.Staff = String(out.Staff);
   if (out.Staff_Expenses_JSON != null) out.Staff_Expenses_JSON = String(out.Staff_Expenses_JSON || '');
   if (out.Product_Sales_JSON != null) out.Product_Sales_JSON = String(out.Product_Sales_JSON || '');
+  if (out[OTHER_EXPENSES_REMARK_KEY] != null) out[OTHER_EXPENSES_REMARK_KEY] = String(out[OTHER_EXPENSES_REMARK_KEY] || '');
   Object.keys(out).forEach((k) => {
     if (
       k === 'Takoyaki_Sales' ||

@@ -10,6 +10,7 @@ import { getAuthDebugInfo } from './_sheets.js';
 const SHEET_INVENTORY = 'Inventory';
 const SHEET_INV_HISTORY = 'Inventory_History';
 const SHEET_SALES = 'Sales_Finance';
+const OTHER_EXPENSES_REMARK_KEY = 'Other_Expenses_Remark';
 const SHEET_NEEDS = 'Needs_Replenish';
 const SHEET_CONFIG = 'Config';
 const SHEET_USERS = 'Users';
@@ -788,13 +789,14 @@ async function ensureSalesSheet(extraHeaders = []) {
 function normalizeSalesRow(row) {
   const out = { ...row };
   Object.keys(out).forEach((k) => {
-    if (k === 'Date' || k === 'Staff' || k === 'Staff_Expenses_JSON' || k === 'Product_Sales_JSON') return;
+    if (k === 'Date' || k === 'Staff' || k === 'Staff_Expenses_JSON' || k === 'Product_Sales_JSON' || k === OTHER_EXPENSES_REMARK_KEY) return;
     out[k] = toNumber(out[k]);
   });
   if (out.Date != null) out.Date = String(out.Date);
   if (out.Staff != null) out.Staff = String(out.Staff);
   if (out.Staff_Expenses_JSON != null) out.Staff_Expenses_JSON = String(out.Staff_Expenses_JSON);
   if (out.Product_Sales_JSON != null) out.Product_Sales_JSON = String(out.Product_Sales_JSON);
+  if (out[OTHER_EXPENSES_REMARK_KEY] != null) out[OTHER_EXPENSES_REMARK_KEY] = String(out[OTHER_EXPENSES_REMARK_KEY]);
   return out;
 }
 
@@ -828,7 +830,7 @@ export async function salesFinanceUpsertByDate({ date, row }) {
     .map((f) => String(f && f.key ? f.key : '').trim())
     .filter((k) => k);
 
-  const extraHeaders = breakdownKeys.concat(['Staff_Expenses_JSON', 'Staff_Expenses_Total', 'Product_Sales_JSON', 'Product_Sales_Total']);
+  const extraHeaders = breakdownKeys.concat([OTHER_EXPENSES_REMARK_KEY, 'Staff_Expenses_JSON', 'Staff_Expenses_Total', 'Product_Sales_JSON', 'Product_Sales_Total']);
   await ensureSalesSheet(extraHeaders);
   const sheet = await readSheetAsObjects(SHEET_SALES);
 
@@ -858,6 +860,7 @@ export async function salesFinanceUpsertByDate({ date, row }) {
   breakdownKeys.forEach((k) => {
     normalized[k] = toNumber(row[k]);
   });
+  normalized[OTHER_EXPENSES_REMARK_KEY] = String(row[OTHER_EXPENSES_REMARK_KEY] || '').trim();
   if (row.Staff != null) normalized.Staff = String(row.Staff);
   if (staffExpenses.json) normalized.Staff_Expenses_JSON = staffExpenses.json;
   normalized.Staff_Expenses_Total = staffExpenses.total;
