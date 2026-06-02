@@ -242,7 +242,7 @@ export default function Layout({ children }) {
 
             <div className="min-w-0">
               <div className="truncate text-sm font-extrabold text-slate-900">{title}</div>
-              <div className="truncate text-xs text-slate-600">Takoyaki Daily Ops</div>
+              {/* <div className="truncate text-xs text-slate-600">Takoyaki Daily Ops</div> */}
             </div>
 
             <div className="ml-auto flex items-center gap-2">
