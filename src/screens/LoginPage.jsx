@@ -50,7 +50,7 @@ export default function LoginPage({ from: fromProp } = {}) {
             <CookingPot size={20} />
           </div>
           <div className="text-center">
-            <div className="text-lg font-extrabold tracking-tight text-slate-900">Takoyaki Inventory</div>
+            <div className="text-lg font-extrabold tracking-tight text-slate-900">Schyer's Kitchen</div>
             <div className="text-sm text-slate-600">Sign in to continue</div>
           </div>
         </div>
