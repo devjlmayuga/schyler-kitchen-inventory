@@ -1,6 +1,8 @@
 import {
   authAdminUpsertUser,
   authLogin,
+  attendanceListWeek,
+  attendanceSaveWeek,
   inventoryDeleteDay,
   inventoryGet,
   inventoryGetOrSeed,
@@ -52,6 +54,21 @@ export async function dispatchAction({ action, token, session, payload }) {
       const role = String(payload?.role || 'staff');
       const active = payload?.active == null ? 'Y' : String(payload.active);
       return await authAdminUpsertUser({ username, password, role, active });
+    }
+
+    // Attendance (admin only)
+    case 'attendance.listWeek': {
+      const ctx = await requireAuth({ token, session });
+      requireAdmin(ctx);
+      return await attendanceListWeek({ weekStart: String(payload?.weekStart || '') });
+    }
+    case 'attendance.saveWeek': {
+      const ctx = await requireAuth({ token, session });
+      requireAdmin(ctx);
+      return await attendanceSaveWeek({
+        weekStart: String(payload?.weekStart || ''),
+        records: payload?.records,
+      });
     }
 
     // Inventory

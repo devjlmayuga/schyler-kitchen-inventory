@@ -18,6 +18,13 @@ function addDays(dateStr, deltaDays) {
   return `${y}-${m}-${day}`;
 }
 
+function sundayOfWeek(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  return addDays(dateStr, -d.getUTCDay());
+}
+
+const ATTENDANCE_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 function listDays(from, to, maxDays = 62) {
   if (!from || !to) return [];
   if (from > to) return [];
@@ -556,7 +563,7 @@ function LineChartWithAxes({ points, height = 240, series }) {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState('report'); // report | items | products | sales
+  const [tab, setTab] = useState('report'); // report | attendance | items | products | sales
 
   // Report
   const today = isoDateToday();
@@ -566,6 +573,14 @@ export default function AdminPage() {
   const [reportError, setReportError] = useState('');
   const [rows, setRows] = useState([]);
   const [weeklyRows, setWeeklyRows] = useState([]);
+
+  // Attendance
+  const [attendanceWeek, setAttendanceWeek] = useState(sundayOfWeek(today));
+  const [attendance, setAttendance] = useState({});
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState('');
+  const [attendanceSuccess, setAttendanceSuccess] = useState('');
+  const attendanceDays = useMemo(() => listDays(attendanceWeek, addDays(attendanceWeek, 6), 7), [attendanceWeek]);
 
   const loadReport = useCallback(async () => {
     setReportError('');
@@ -910,9 +925,57 @@ export default function AdminPage() {
   }, [DEFAULT_SALES_CONFIG]);
 
   useEffect(() => {
-    if (tab !== 'sales' && tab !== 'report') return;
+    if (tab !== 'sales' && tab !== 'report' && tab !== 'attendance') return;
     loadSalesCfg();
   }, [loadSalesCfg, tab]);
+
+  const loadAttendance = useCallback(async () => {
+    setAttendanceError('');
+    setAttendanceSuccess('');
+    setAttendanceLoading(true);
+    try {
+      const data = await apiGet('attendance.listWeek', { weekStart: attendanceWeek });
+      const next = {};
+      (Array.isArray(data?.records) ? data.records : []).forEach((record) => {
+        if (record?.staff && record?.date) next[`${record.staff}\n${record.date}`] = Boolean(record.onDuty);
+      });
+      setAttendance(next);
+    } catch (e) {
+      setAttendanceError(e?.message || 'Failed to load attendance');
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [attendanceWeek]);
+
+  useEffect(() => {
+    if (tab !== 'attendance') return;
+    loadAttendance();
+  }, [loadAttendance, tab]);
+
+  function toggleAttendance(staff, date) {
+    const key = `${staff}\n${date}`;
+    setAttendance((prev) => ({ ...prev, [key]: !prev[key] }));
+    setAttendanceSuccess('');
+  }
+
+  async function saveAttendance() {
+    setAttendanceError('');
+    setAttendanceSuccess('');
+    setAttendanceLoading(true);
+    try {
+      const records = (salesCfg.staff || []).flatMap((staff) =>
+        attendanceDays.map((date) => ({ staff, date, onDuty: Boolean(attendance[`${staff}\n${date}`]) })),
+      );
+      await apiPost('attendance.saveWeek', { weekStart: attendanceWeek, records });
+      setAttendanceSuccess('Weekly attendance saved.');
+      await loadAttendance();
+      setAttendanceSuccess('Weekly attendance saved.');
+    } catch (e) {
+      setAttendanceError(e?.message || 'Failed to save attendance');
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }
 
   async function saveSalesCfg() {
     setSalesError('');
@@ -982,7 +1045,7 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <FullscreenLoading
-        show={reportLoading || thLoading || prodLoading}
+        show={reportLoading || thLoading || prodLoading || attendanceLoading}
         title={
           reportLoading
             ? 'Loading report…'
@@ -1016,6 +1079,13 @@ export default function AdminPage() {
               className={['md-btn px-4 py-2', tab === 'items' ? 'md-btn-primary' : 'md-btn-outline'].join(' ')}
             >
               Items
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('attendance')}
+              className={['md-btn px-4 py-2', tab === 'attendance' ? 'md-btn-primary' : 'md-btn-outline'].join(' ')}
+            >
+              Attendance
             </button>
             <button
               type="button"
@@ -1192,6 +1262,87 @@ export default function AdminPage() {
                       No rows in this range.
                     </td>
                   </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'attendance' ? (
+        <div className="space-y-3">
+          <ErrorBanner message={attendanceError} onRetry={loadAttendance} />
+          {attendanceSuccess ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              {attendanceSuccess}
+            </div>
+          ) : null}
+
+          <div className="md-card p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold">Weekly Staff Attendance</div>
+                <div className="mt-1 text-xs text-slate-600">Each week starts Sunday and ends Saturday.</div>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <button type="button" onClick={() => setAttendanceWeek(addDays(attendanceWeek, -7))} className="md-btn md-btn-outline h-[42px]">
+                  Previous
+                </button>
+                <div className="w-[180px]">
+                  <DateInput label="Week containing" value={attendanceWeek} onChange={(value) => setAttendanceWeek(sundayOfWeek(value))} />
+                </div>
+                <button type="button" onClick={() => setAttendanceWeek(addDays(attendanceWeek, 7))} className="md-btn md-btn-outline h-[42px]">
+                  Next
+                </button>
+                <button type="button" onClick={saveAttendance} disabled={attendanceLoading || !(salesCfg.staff || []).length} className="md-btn md-btn-primary h-[42px]">
+                  Save Attendance
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              {attendanceWeek} to {addDays(attendanceWeek, 6)}
+            </div>
+          </div>
+
+          <div className="md-table-wrap">
+            <table className="min-w-[820px] w-full text-center text-sm">
+              <thead className="md-table-head">
+                <tr>
+                  <th className="px-3 py-3 text-left font-semibold">Staff</th>
+                  {attendanceDays.map((date, index) => (
+                    <th key={date} className="px-3 py-3 font-semibold">
+                      <div>{ATTENDANCE_DAY_LABELS[index]}</div>
+                      <div className="text-[11px] font-normal text-slate-500">{date.slice(5)}</div>
+                    </th>
+                  ))}
+                  <th className="px-3 py-3 font-semibold">Total Days</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(salesCfg.staff || []).map((staff) => {
+                  const total = attendanceDays.filter((date) => attendance[`${staff}\n${date}`]).length;
+                  return (
+                    <tr key={staff} className="border-t">
+                      <td className="px-3 py-3 text-left font-semibold">{staff}</td>
+                      {attendanceDays.map((date) => (
+                        <td key={date} className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(attendance[`${staff}\n${date}`])}
+                            onChange={() => toggleAttendance(staff, date)}
+                            aria-label={`${staff} on duty ${date}`}
+                            className="h-5 w-5 accent-[var(--p-5)]"
+                          />
+                        </td>
+                      ))}
+                      <td className="px-3 py-3">
+                        <span className="inline-flex min-w-10 justify-center rounded-full bg-rose-100 px-3 py-1 font-black text-[var(--p-5)]">{total}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!(salesCfg.staff || []).length ? (
+                  <tr><td colSpan={9} className="px-3 py-6 text-slate-600">No staff configured. Add staff under Admin → Sales first.</td></tr>
                 ) : null}
               </tbody>
             </table>

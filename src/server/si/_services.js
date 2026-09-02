@@ -15,6 +15,7 @@ const SHEET_NEEDS = 'Needs_Replenish';
 const SHEET_CONFIG = 'Config';
 const SHEET_USERS = 'Users';
 const SHEET_PRODUCTS = 'Products';
+const SHEET_ATTENDANCE = 'Attendance';
 
 const INV_DAY_CLOSED_COL = 'Is_Closed';
 
@@ -274,6 +275,52 @@ export async function authAdminUpsertUser({ username, password, role, active }) 
 
   await overwriteSheetFromObjects(SHEET_USERS, data.headers, nextRows);
   return { username: u, role: r, updated };
+}
+
+// ---------------- Attendance ----------------
+
+async function ensureAttendanceSheet() {
+  await ensureSheet({ title: SHEET_ATTENDANCE, headers: ['Date', 'Staff', 'On_Duty'] });
+  await ensureHeaders(SHEET_ATTENDANCE, ['Date', 'Staff', 'On_Duty']);
+}
+
+export async function attendanceListWeek({ weekStart }) {
+  if (!isIsoDate(weekStart)) throw new Error('payload.weekStart must be YYYY-MM-DD');
+  const weekEnd = addDaysIso(weekStart, 6);
+  await ensureAttendanceSheet();
+  const sheet = await readSheetAsObjects(SHEET_ATTENDANCE);
+  assertHeaders(SHEET_ATTENDANCE, sheet.headers, ['Date', 'Staff', 'On_Duty']);
+  const records = sheet.values
+    .map((r) => ({
+      date: normalizeDateKey(r.Date),
+      staff: String(r.Staff || '').trim(),
+      onDuty: isClosedFlag(r.On_Duty),
+    }))
+    .filter((r) => r.staff && r.date >= weekStart && r.date <= weekEnd);
+  return { weekStart, weekEnd, records };
+}
+
+export async function attendanceSaveWeek({ weekStart, records }) {
+  if (!isIsoDate(weekStart)) throw new Error('payload.weekStart must be YYYY-MM-DD');
+  if (!Array.isArray(records)) throw new Error('payload.records must be an array');
+  const weekEnd = addDaysIso(weekStart, 6);
+  await ensureAttendanceSheet();
+  const sheet = await readSheetAsObjects(SHEET_ATTENDANCE);
+  assertHeaders(SHEET_ATTENDANCE, sheet.headers, ['Date', 'Staff', 'On_Duty']);
+
+  const remaining = sheet.values.filter((r) => {
+    const date = normalizeDateKey(r.Date);
+    return date < weekStart || date > weekEnd;
+  });
+  const saved = records
+    .map((r) => ({
+      Date: String(r?.date || ''),
+      Staff: String(r?.staff || '').trim(),
+      On_Duty: r?.onDuty ? 'Y' : 'N',
+    }))
+    .filter((r) => isIsoDate(r.Date) && r.Date >= weekStart && r.Date <= weekEnd && r.Staff);
+  await overwriteSheetFromObjects(SHEET_ATTENDANCE, sheet.headers, remaining.concat(saved));
+  return { weekStart, weekEnd, saved: saved.length };
 }
 
 // ---------------- Items (Inventory master CRUD) ----------------

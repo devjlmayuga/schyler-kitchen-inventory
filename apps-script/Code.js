@@ -19,6 +19,7 @@ const SHEET_NEEDS = 'Needs_Replenish';
 const SHEET_CONFIG = 'Config';
 const SHEET_USERS = 'Users';
 const SHEET_PRODUCTS = 'Products';
+const SHEET_ATTENDANCE = 'Attendance';
 
 const SESSION_TTL_SECONDS = 21600; // 6 hours (Apps Script cache max)
 
@@ -84,6 +85,11 @@ function doGet(e) {
           const user = requireAuth({ token, session });
           return jsonOk({ user });
         }
+      case 'attendance.listWeek': {
+        const ctx = requireAuth({ token, session });
+        requireAdmin(ctx);
+        return jsonOk(attendanceListWeek({ weekStart: (e?.parameter?.weekStart || '').toString() }));
+      }
       case 'inventory.get':
         {
           requireAuth({ token, session });
@@ -185,6 +191,13 @@ function doPost(e) {
         const active = body?.payload?.active == null ? 'Y' : String(body?.payload?.active);
         const result = authAdminUpsertUser({ username, password, role, active });
         return jsonOk(result);
+      }
+      case 'attendance.saveWeek': {
+        const ctx = requireAuth({ token, session });
+        requireAdmin(ctx);
+        const weekStart = String(body?.payload?.weekStart || '');
+        const records = body?.payload?.records;
+        return jsonOk(attendanceSaveWeek({ weekStart, records }));
       }
       case 'inventory.submit': {
         requireAuth({ token, session });
@@ -320,6 +333,50 @@ function doPost(e) {
 }
 
 // ---------------- Inventory ----------------
+
+function getOrCreateAttendanceSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_ATTENDANCE);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_ATTENDANCE);
+    sheet.getRange(1, 1, 1, 3).setValues([['Date', 'Staff', 'On_Duty']]);
+  } else {
+    ensureHeaders(sheet, ['Date', 'Staff', 'On_Duty']);
+  }
+  return sheet;
+}
+
+function attendanceListWeek({ weekStart }) {
+  if (!isIsoDate(weekStart)) throw new Error('weekStart must be YYYY-MM-DD');
+  const weekEnd = addDaysIso(weekStart, 6);
+  const sheet = getOrCreateAttendanceSheet();
+  const data = readSheetAsObjects(sheet);
+  const records = data.values
+    .map((r) => ({ date: normalizeDateKey(r.Date), staff: String(r.Staff || '').trim(), onDuty: isClosedFlag(r.On_Duty) }))
+    .filter((r) => r.staff && r.date >= weekStart && r.date <= weekEnd);
+  return { weekStart, weekEnd, records };
+}
+
+function attendanceSaveWeek({ weekStart, records }) {
+  if (!isIsoDate(weekStart)) throw new Error('weekStart must be YYYY-MM-DD');
+  if (!Array.isArray(records)) throw new Error('records must be an array');
+  const weekEnd = addDaysIso(weekStart, 6);
+  const sheet = getOrCreateAttendanceSheet();
+  const data = readSheetAsObjects(sheet);
+  const remaining = data.values.filter((r) => {
+    const date = normalizeDateKey(r.Date);
+    return date < weekStart || date > weekEnd;
+  });
+  const saved = records
+    .map((r) => ({ Date: String(r?.date || ''), Staff: String(r?.staff || '').trim(), On_Duty: r?.onDuty ? 'Y' : 'N' }))
+    .filter((r) => isIsoDate(r.Date) && r.Date >= weekStart && r.Date <= weekEnd && r.Staff);
+  const all = remaining.concat(saved);
+  if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, data.headers.length).clearContent();
+  if (all.length) {
+    sheet.getRange(2, 1, all.length, data.headers.length).setValues(all.map((r) => data.headers.map((h) => r[h] ?? '')));
+  }
+  return { weekStart, weekEnd, saved: saved.length };
+}
 
 const INV_DAY_CLOSED_COL = 'Is_Closed';
 
