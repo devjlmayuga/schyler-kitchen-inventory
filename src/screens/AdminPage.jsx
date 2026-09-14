@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import DateInput from '../components/inputs/DateInput.jsx';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
+import FaceAttendancePanel from '../components/FaceAttendancePanel.jsx';
 import TextInput from '../components/inputs/TextInput.jsx';
 import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
@@ -45,6 +46,21 @@ function toNumber(v) {
 const _QTY_FORMATTER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 function formatQty(v) {
   return _QTY_FORMATTER.format(toNumber(v));
+}
+
+const _MANILA_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-PH', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+function formatManilaDateTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : _MANILA_DATE_TIME_FORMATTER.format(date);
 }
 
 function parseJsonObject(raw) {
@@ -568,6 +584,7 @@ export default function AdminPage() {
   // Attendance
   const [attendanceWeek, setAttendanceWeek] = useState(sundayOfWeek(today));
   const [attendance, setAttendance] = useState({});
+  const [faceEvents, setFaceEvents] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState('');
   const attendanceDays = useMemo(() => listDays(attendanceWeek, addDays(attendanceWeek, 6), 7), [attendanceWeek]);
@@ -923,12 +940,16 @@ export default function AdminPage() {
     setAttendanceError('');
     setAttendanceLoading(true);
     try {
-      const data = await apiGet('attendance.listWeek', { weekStart: attendanceWeek });
+      const [data, clockData] = await Promise.all([
+        apiGet('attendance.listWeek', { weekStart: attendanceWeek }),
+        apiGet('face.eventsWeek', { weekStart: attendanceWeek }),
+      ]);
       const next = {};
       (Array.isArray(data?.records) ? data.records : []).forEach((record) => {
         if (record?.staff && record?.date) next[`${record.staff}\n${record.date}`] = Boolean(record.onDuty);
       });
       setAttendance(next);
+      setFaceEvents(Array.isArray(clockData?.events) ? clockData.events : []);
     } catch (e) {
       setAttendanceError(e?.message || 'Failed to load attendance');
     } finally {
@@ -1300,6 +1321,57 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="md-card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold">Time In / Time Out Log</div>
+                <div className="mt-1 text-xs text-slate-600">Face clock events for the selected week, shown in Manila time.</div>
+              </div>
+              <button type="button" className="md-btn md-btn-outline" onClick={loadAttendance} disabled={attendanceLoading}>
+                {attendanceLoading ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] w-full text-left text-sm">
+                <thead className="md-table-head">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Date &amp; Time</th>
+                    <th className="px-4 py-3 font-semibold">Staff</th>
+                    <th className="px-4 py-3 font-semibold">Event</th>
+                    <th className="px-4 py-3 font-semibold">Confidence</th>
+                    <th className="px-4 py-3 font-semibold">Verification</th>
+                    <th className="px-4 py-3 font-semibold">Device</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faceEvents.map((event) => {
+                    const isTimeIn = event.event_type === 'CHECK_IN';
+                    const confidence = Number(event.confidence);
+                    return (
+                      <tr key={event.id} className="border-t align-top">
+                        <td className="whitespace-nowrap px-4 py-3 font-medium">{formatManilaDateTime(event.event_time)}</td>
+                        <td className="px-4 py-3 font-semibold">{event.staff || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${isTimeIn ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                            {isTimeIn ? 'TIME IN' : 'TIME OUT'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '—'}</td>
+                        <td className="px-4 py-3 capitalize">{event.verification || 'face'}</td>
+                        <td className="max-w-[280px] truncate px-4 py-3 text-xs text-slate-600" title={event.device_label || ''}>{event.device_label || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                  {!faceEvents.length && !attendanceLoading ? (
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-600">No time in or time out records for this week.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <FaceAttendancePanel staff={salesCfg.staff || []} onRecorded={loadAttendance} />
         </div>
       ) : null}
 

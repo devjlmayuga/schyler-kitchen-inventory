@@ -32,7 +32,7 @@ export async function assertSchemaVersion(client = dbClient()) {
   if (schemaVerified) return;
   try {
     const result = await client.query('select max(version)::int version from schyler_kitchen.schema_versions');
-    if (result.rows[0]?.version !== 1) throw new Error('Database schema version is incompatible');
+    if (result.rows[0]?.version !== 2) throw new Error('Database schema version is incompatible');
     schemaVerified = true;
   } catch (error) {
     if (error.message === 'Database schema version is incompatible') throw error;
@@ -42,7 +42,7 @@ export async function assertSchemaVersion(client = dbClient()) {
 
 export async function withTransaction(action, operation) {
   if (transactions.getStore()) return operation();
-  const reads = new Set(['auth.me','auth.login','attendance.listWeek','inventory.get','inventory.getOrSeed','inventory.seedTemplate','salesFinance.list','salesFinance.getByDate','needs.list','thresholds.get','items.list','products.list','salesConfig.get','sales.bootstrap','debug.auth']);
+  const reads = new Set(['auth.me','auth.login','attendance.listWeek','face.profiles','face.eventsWeek','inventory.get','inventory.getOrSeed','inventory.seedTemplate','salesFinance.list','salesFinance.getByDate','needs.list','thresholds.get','items.list','products.list','salesConfig.get','sales.bootstrap','debug.auth']);
   if (reads.has(action)) {
     await assertSchemaVersion(getPool());
     return operation();

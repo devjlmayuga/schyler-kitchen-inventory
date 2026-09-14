@@ -8,6 +8,7 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
   process.env.DATABASE_URL = databaseUrl;
   process.env.SI_API_TOKEN = 'local-test-token';
   process.env.SI_JWT_SECRET = 'local-test-jwt-secret';
+  process.env.FACE_DESCRIPTOR_KEY = 'local-test-face-descriptor-key-32-characters';
   const { dispatchAction } = await import('../src/server/si/_router.js');
   const { closePool } = await import('../src/server/si/postgres/client.js');
   const covered = new Set();
@@ -94,6 +95,18 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
   await call('needs.manual.remove', { date: '2099-01-02', Product: items.items[0].Product });
 
   await call('attendance.saveWeek', { weekStart: '2098-12-28', records: [] });
+
+  const faceDescriptor = Array.from({ length: 64 }, (_, index) => (index === 0 ? 1 : 0));
+  assert.equal((await call('face.enroll', { staff: 'Nathalie', descriptor: faceDescriptor, consent: true })).enrolled, true);
+  assert.equal((await call('face.profiles')).profiles.length, 1);
+  assert.equal((await call('face.checkIn', { descriptor: faceDescriptor, deviceLabel: 'test-kiosk' })).staff, 'Nathalie');
+  covered.add('face.clock');
+  const publicClockOut = await dispatchAction({ action: 'face.clock', payload: { descriptor: faceDescriptor, eventType: 'CHECK_OUT', deviceLabel: 'public-kiosk' } });
+  assert.equal(publicClockOut.recorded, true);
+  const faceEvents = (await call('face.eventsWeek', { weekStart: new Date().toISOString().slice(0, 10) })).events;
+  assert.equal(faceEvents.length, 2);
+  assert.deepEqual(faceEvents.map((event) => event.event_type), ['CHECK_OUT', 'CHECK_IN']);
+  assert.equal((await call('face.remove', { staff: 'Nathalie' })).deleted, 1);
 
   const routerSource = fs.readFileSync(new URL('../src/server/si/_router.js', import.meta.url), 'utf8');
   const actions = [...routerSource.matchAll(/case '([^']+)'/g)].map((match) => match[1]);

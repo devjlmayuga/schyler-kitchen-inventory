@@ -85,6 +85,25 @@ CREATE TABLE IF NOT EXISTS attendance (
   PRIMARY KEY (business_date, staff_id)
 );
 
+CREATE TABLE IF NOT EXISTS face_profiles (
+  staff_id bigint PRIMARY KEY REFERENCES staff_members(id) ON DELETE CASCADE,
+  descriptor_ciphertext text NOT NULL,
+  consent_at timestamptz NOT NULL,
+  enrolled_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  active boolean NOT NULL DEFAULT true
+);
+CREATE TABLE IF NOT EXISTS face_attendance_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  staff_id bigint NOT NULL REFERENCES staff_members(id),
+  event_time timestamptz NOT NULL DEFAULT now(),
+  event_type text NOT NULL DEFAULT 'CHECK_IN' CHECK (event_type IN ('CHECK_IN','CHECK_OUT')),
+  confidence numeric(6,5) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  verification text NOT NULL DEFAULT 'FACE',
+  device_label text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS face_attendance_events_staff_time_idx ON face_attendance_events(staff_id,event_time DESC);
+
 CREATE TABLE IF NOT EXISTS app_config (
   key text PRIMARY KEY,
   value jsonb NOT NULL
@@ -123,5 +142,5 @@ CREATE TABLE IF NOT EXISTS application_write_log (
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO schema_versions(version) VALUES (1) ON CONFLICT DO NOTHING;
+INSERT INTO schema_versions(version) VALUES (1),(2) ON CONFLICT DO NOTHING;
 COMMIT;

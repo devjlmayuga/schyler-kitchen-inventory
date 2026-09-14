@@ -22,9 +22,12 @@ Open `http://localhost:3000`. Local development can connect directly to Neon whe
 - `SI_API_TOKEN`: server-only administrative API token.
 - `SI_JWT_SECRET`: signs login sessions.
 - `SI_AUTH_PEPPER`: participates in password hashing and must remain stable.
+- `FACE_DESCRIPTOR_KEY`: encrypts face descriptors and must remain stable. Use a separate long random secret in Vercel.
 - `SI_DB_POOL_MAX`: optional per-instance connection limit; defaults to `5`.
 
 Do not expose database credentials, the API token, JWT secret, or pepper through `NEXT_PUBLIC_*` variables.
+
+Face detection, liveness checks, and descriptor generation run in the browser. Raw camera images are not uploaded or stored. Enrollment requires recorded staff consent and should always have a non-biometric fallback.
 
 ## Database
 

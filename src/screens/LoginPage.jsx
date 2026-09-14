@@ -1,12 +1,13 @@
 'use client';
 
-import { CookingPot, Lock, User } from 'lucide-react';
+import { Clock3, CookingPot, Lock, LogIn, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
 import { apiPost } from '../lib/apiClient.js';
 import { isLoggedIn, setLocked, setSession } from '../lib/auth.js';
+import PublicFaceClock from '../components/PublicFaceClock.jsx';
 
 export default function LoginPage({ from: fromProp } = {}) {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function LoginPage({ from: fromProp } = {}) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [view, setView] = useState('login');
 
   useEffect(() => {
     if (isLoggedIn()) router.replace('/inventory');
@@ -51,11 +53,32 @@ export default function LoginPage({ from: fromProp } = {}) {
           </div>
           <div className="text-center">
             <div className="text-lg font-extrabold tracking-tight text-slate-900">Schyer's Kitchen</div>
-            <div className="text-sm text-slate-600">Sign in to continue</div>
+            <div className="text-sm text-slate-600">{view === 'login' ? 'Sign in to continue' : 'Staff attendance kiosk'}</div>
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="md-card-elevated p-5">
+        <div className="mb-4 grid grid-cols-2 rounded-xl bg-slate-200 p-1" role="tablist" aria-label="Public page mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'login'}
+            onClick={() => setView('login')}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${view === 'login' ? 'bg-white text-[var(--p-5)] shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            <LogIn size={17} /> Login
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'clock'}
+            onClick={() => setView('clock')}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${view === 'clock' ? 'bg-white text-[var(--p-5)] shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            <Clock3 size={17} /> Time In / Out
+          </button>
+        </div>
+
+        {view === 'clock' ? <PublicFaceClock compact /> : <form onSubmit={onSubmit} className="md-card-elevated p-5">
           <ErrorBanner message={error} />
 
           <div className="mt-4 space-y-3">
@@ -94,7 +117,7 @@ export default function LoginPage({ from: fromProp } = {}) {
           </button>
 
           
-        </form>
+        </form>}
       </div>
     </div>
   );

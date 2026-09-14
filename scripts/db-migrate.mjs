@@ -8,5 +8,6 @@ const client = new pg.Client({ connectionString });
 await client.connect();
 try {
   await client.query(fs.readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8'));
-  console.log('Database schema version 1 applied.');
+  const version = await client.query('select max(version)::int version from schyler_kitchen.schema_versions');
+  console.log(`Database schema version ${version.rows[0].version} applied.`);
 } finally { await client.end(); }

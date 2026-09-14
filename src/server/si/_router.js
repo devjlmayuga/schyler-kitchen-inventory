@@ -32,6 +32,11 @@ import {
   thresholdsGet,
   thresholdsUpdate,
   debugAuthInfo,
+  faceProfilesList,
+  faceEnroll,
+  faceRemove,
+  faceCheckIn,
+  faceAttendanceListWeek,
 } from './_services.js';
 import { withStorageTransaction } from './repository.js';
 
@@ -70,6 +75,29 @@ async function dispatchActionInternal({ action, token, session, payload }) {
         weekStart: String(payload?.weekStart || ''),
         records: payload?.records,
       });
+    }
+    case 'face.profiles': {
+      const ctx = await requireAuth({ token, session }); requireAdmin(ctx);
+      return faceProfilesList();
+    }
+    case 'face.enroll': {
+      const ctx = await requireAuth({ token, session }); requireAdmin(ctx);
+      return faceEnroll({ staff: payload?.staff, descriptor: payload?.descriptor, consent: payload?.consent });
+    }
+    case 'face.remove': {
+      const ctx = await requireAuth({ token, session }); requireAdmin(ctx);
+      return faceRemove({ staff: payload?.staff });
+    }
+    case 'face.checkIn': {
+      await requireAuth({ token, session });
+      return faceCheckIn({ descriptor: payload?.descriptor, deviceLabel: payload?.deviceLabel, eventType: 'CHECK_IN' });
+    }
+    case 'face.clock': {
+      return faceCheckIn({ descriptor: payload?.descriptor, deviceLabel: payload?.deviceLabel, eventType: payload?.eventType });
+    }
+    case 'face.eventsWeek': {
+      const ctx = await requireAuth({ token, session }); requireAdmin(ctx);
+      return faceAttendanceListWeek({ weekStart: String(payload?.weekStart || '') });
     }
 
     // Inventory

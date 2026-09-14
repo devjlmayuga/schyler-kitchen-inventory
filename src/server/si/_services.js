@@ -23,6 +23,11 @@ import {
   deleteProduct,
   getSalesBootstrapData,
   getAutoAttendanceWeek,
+  saveFaceProfile,
+  listFaceProfiles,
+  removeFaceProfile,
+  recordFaceAttendance,
+  listFaceAttendanceWeek,
 } from './repository.js';
 import { getAuthDebugInfo } from './repository.js';
 
@@ -152,6 +157,42 @@ function hashPassword(password, salt) {
   const pepper = String(process.env.SI_AUTH_PEPPER || '').trim();
   const input = `${String(salt || '')}${String(password || '')}${pepper}`;
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
+}
+
+function faceEncryptionKey() {
+  const secret = String(process.env.FACE_DESCRIPTOR_KEY || process.env.SI_JWT_SECRET || '').trim();
+  if (secret.length < 24) throw new Error('FACE_DESCRIPTOR_KEY must be configured with at least 24 characters');
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function validateFaceDescriptor(value) {
+  if (!Array.isArray(value) || value.length < 64 || value.length > 2048) throw new Error('A valid face descriptor is required');
+  const descriptor = value.map(Number);
+  if (descriptor.some((number) => !Number.isFinite(number))) throw new Error('Face descriptor contains invalid values');
+  return descriptor;
+}
+
+function encryptFaceDescriptor(descriptor) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', faceEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(descriptor)), cipher.final()]);
+  return [iv, cipher.getAuthTag(), encrypted].map((part) => part.toString('base64url')).join('.');
+}
+
+function decryptFaceDescriptor(value) {
+  const [iv, tag, encrypted] = String(value || '').split('.').map((part) => Buffer.from(part, 'base64url'));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', faceEncryptionKey(), iv);
+  decipher.setAuthTag(tag);
+  return JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8'));
+}
+
+function cosineSimilarity(left, right) {
+  if (left.length !== right.length) return -1;
+  let dot = 0; let leftSize = 0; let rightSize = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index]; leftSize += left[index] ** 2; rightSize += right[index] ** 2;
+  }
+  return leftSize && rightSize ? dot / Math.sqrt(leftSize * rightSize) : -1;
 }
 
 function defaultSalesConfig() {
@@ -297,7 +338,9 @@ export async function attendanceListWeek({ weekStart }) {
   const data = await getAutoAttendanceWeek(weekStart, weekEnd);
   const staff = normalizeSalesConfig(data.config).staff;
   const openDates = data.openDates;
-  const records = staff.flatMap((name) => openDates.map((date) => ({ date, staff: name, onDuty: true })));
+  const byStaffDate = new Map(staff.flatMap((name) => openDates.map((date) => [`${name}\n${date}`, { date, staff: name, onDuty: true }])));
+  data.faceRecords.forEach(({ date, staff: name }) => byStaffDate.set(`${name}\n${date}`, { date, staff: name, onDuty: true }));
+  const records = [...byStaffDate.values()];
   return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales' };
 }
 
@@ -315,6 +358,44 @@ export async function attendanceSaveWeek({ weekStart, records }) {
     .filter((r) => isIsoDate(r.Date) && r.Date >= weekStart && r.Date <= weekEnd && r.Staff);
   await replaceAttendanceWeek(weekStart, weekEnd, saved);
   return { weekStart, weekEnd, saved: saved.length };
+}
+
+export async function faceProfilesList() {
+  const profiles = await listFaceProfiles();
+  return { profiles: profiles.map(({ descriptor_ciphertext, ...profile }) => ({ ...profile, enrolled: Boolean(descriptor_ciphertext) })) };
+}
+
+export async function faceEnroll({ staff, descriptor, consent }) {
+  const name = String(staff || '').trim();
+  if (!name) throw new Error('staff is required');
+  if (consent !== true) throw new Error('Recorded staff consent is required');
+  await saveFaceProfile(name, encryptFaceDescriptor(validateFaceDescriptor(descriptor)));
+  return { staff: name, enrolled: true };
+}
+
+export async function faceRemove({ staff }) {
+  return { staff, deleted: await removeFaceProfile(String(staff || '').trim()) };
+}
+
+export async function faceCheckIn({ descriptor, deviceLabel, eventType = 'CHECK_IN' }) {
+  const normalizedEventType = String(eventType || '').toUpperCase();
+  if (!['CHECK_IN', 'CHECK_OUT'].includes(normalizedEventType)) throw new Error('eventType must be CHECK_IN or CHECK_OUT');
+  const probe = validateFaceDescriptor(descriptor);
+  const profiles = await listFaceProfiles();
+  if (!profiles.length) throw new Error('No enrolled face profiles');
+  const matches = profiles.map((profile) => ({ ...profile, similarity: cosineSimilarity(probe, decryptFaceDescriptor(profile.descriptor_ciphertext)) }));
+  matches.sort((a, b) => b.similarity - a.similarity);
+  const match = matches[0];
+  const threshold = Number(process.env.FACE_MATCH_THRESHOLD || 0.55);
+  if (!match || match.similarity < threshold) throw new Error('Face not recognized');
+  const event = await recordFaceAttendance(match.id, Math.min(1, Math.max(0, match.similarity)), String(deviceLabel || '').slice(0, 100), normalizedEventType);
+  return { staff: match.staff, confidence: match.similarity, recorded: Boolean(event), duplicate: !event, eventType: normalizedEventType, eventTime: event?.event_time || null };
+}
+
+export async function faceAttendanceListWeek({ weekStart }) {
+  if (!isIsoDate(weekStart)) throw new Error('weekStart must be YYYY-MM-DD');
+  const weekEnd = addDaysIso(weekStart, 6);
+  return { weekStart, weekEnd, events: await listFaceAttendanceWeek(weekStart, weekEnd) };
 }
 
 // ---------------- Items (Inventory master CRUD) ----------------

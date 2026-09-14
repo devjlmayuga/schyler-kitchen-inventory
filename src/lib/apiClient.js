@@ -44,7 +44,7 @@ export class ApiError extends Error {
 }
 
 function isPublicAction(action) {
-  return action === 'auth.login';
+  return action === 'auth.login' || action === 'face.clock';
 }
 
 function buildAuthParams(action) {

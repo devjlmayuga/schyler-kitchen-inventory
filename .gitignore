@@ -10,3 +10,4 @@ sandbox-jl-498113-809922f5abce.json
 .env.local
 .env.*.local
 migration-reports/
+.next*

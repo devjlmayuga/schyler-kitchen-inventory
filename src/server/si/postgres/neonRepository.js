@@ -249,13 +249,62 @@ export async function getSalesBootstrapData(date) {
 export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   const result = await dbClient().query(`select
     (select value from schyler_kitchen.app_config where key='sales_config') config,
-    coalesce((select jsonb_agg(business_date::text order by business_date) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'[]'::jsonb) open_dates`, [weekStart, weekEnd]);
+    coalesce((select jsonb_agg(business_date::text order by business_date) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'[]'::jsonb) open_dates,
+    coalesce((select jsonb_agg(jsonb_build_object('date',business_date,'staff',staff) order by business_date,staff) from (
+      select distinct (e.event_time at time zone 'Asia/Manila')::date::text business_date,s.display_name staff
+      from schyler_kitchen.face_attendance_events e join schyler_kitchen.staff_members s on s.id=e.staff_id
+      where (e.event_time at time zone 'Asia/Manila')::date between $1::date and $2::date
+    ) face_days),'[]'::jsonb) face_records`, [weekStart, weekEnd]);
   const data = result.rows[0] || {};
   let config = data.config;
   if (typeof config === 'string') {
     try { config = JSON.parse(config); } catch { config = null; }
   }
-  return { config, openDates: data.open_dates || [] };
+  return { config, openDates: data.open_dates || [], faceRecords: data.face_records || [] };
+}
+
+export async function saveFaceProfile(staff, descriptorCiphertext) {
+  const result = await dbClient().query(`with member as (
+    insert into schyler_kitchen.staff_members(display_name) values($1)
+    on conflict(display_name) do update set active=true returning id
+  ) insert into schyler_kitchen.face_profiles(staff_id,descriptor_ciphertext,consent_at,active)
+    select id,$2,now(),true from member
+    on conflict(staff_id) do update set descriptor_ciphertext=excluded.descriptor_ciphertext,consent_at=excluded.consent_at,updated_at=now(),active=true
+    returning staff_id`, [staff, descriptorCiphertext]);
+  return result.rows[0]?.staff_id;
+}
+
+export async function listFaceProfiles() {
+  const result = await dbClient().query(`select s.id,s.display_name staff,p.descriptor_ciphertext,p.consent_at,p.updated_at
+    from schyler_kitchen.face_profiles p join schyler_kitchen.staff_members s on s.id=p.staff_id where p.active order by s.display_name`);
+  return result.rows;
+}
+
+export async function removeFaceProfile(staff) {
+  const result = await dbClient().query(`delete from schyler_kitchen.face_profiles p using schyler_kitchen.staff_members s
+    where p.staff_id=s.id and s.display_name=$1`, [staff]);
+  return result.rowCount;
+}
+
+export async function recordFaceAttendance(staffId, confidence, deviceLabel, eventType = 'CHECK_IN') {
+  const result = await dbClient().query(`with locked as (
+    select pg_advisory_xact_lock($1::bigint)
+  ), last_event as (
+    select event_type from schyler_kitchen.face_attendance_events,locked where staff_id=$1 order by event_time desc,id desc limit 1
+  ) insert into schyler_kitchen.face_attendance_events(staff_id,confidence,device_label,event_type)
+    select $1,$2,$3,$4 from locked
+    where ($4='CHECK_IN' and coalesce((select event_type from last_event),'CHECK_OUT')='CHECK_OUT')
+       or ($4='CHECK_OUT' and (select event_type from last_event)='CHECK_IN')
+    returning id,event_time,event_type`, [staffId, confidence, deviceLabel, eventType]);
+  return result.rows[0] || null;
+}
+
+export async function listFaceAttendanceWeek(weekStart, weekEnd) {
+  const result = await dbClient().query(`select e.id,s.display_name staff,e.event_time,e.event_type,e.confidence,e.verification,e.device_label
+    from schyler_kitchen.face_attendance_events e join schyler_kitchen.staff_members s on s.id=e.staff_id
+    where (e.event_time at time zone 'Asia/Manila')::date between $1::date and $2::date
+    order by e.event_time desc`, [weekStart, weekEnd]);
+  return result.rows;
 }
 
 export async function upsertSalesDay(date, row) {
