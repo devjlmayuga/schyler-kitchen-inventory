@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: `Schyer's Kitchen`,
+  title: `Schyler's Kitchen`,
   description: 'Takoyaki daily inventory and sales tracker',
 };
 

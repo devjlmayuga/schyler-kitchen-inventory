@@ -52,7 +52,7 @@ export default function LoginPage({ from: fromProp } = {}) {
             <CookingPot size={20} />
           </div>
           <div className="text-center">
-            <div className="text-lg font-extrabold tracking-tight text-slate-900">Schyer's Kitchen</div>
+            <div className="text-lg font-extrabold tracking-tight text-slate-900">Schyler's Kitchen</div>
             <div className="text-sm text-slate-600">{view === 'login' ? 'Sign in to continue' : 'Staff attendance kiosk'}</div>
           </div>
         </div>
