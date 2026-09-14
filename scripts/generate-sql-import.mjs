@@ -49,7 +49,7 @@ statements.push(`INSERT INTO users(username,password_hash,salt,role,active)
 SELECT trim("Username"),coalesce("Password_Hash",''),coalesce("Salt",''),coalesce(nullif("Role",''),'staff'),
   upper(trim(coalesce("Active",'Y'))) NOT IN ('N','NO','FALSE','0')
 FROM jsonb_to_recordset(${literal(JSON.stringify(rows('Users')))}::jsonb) AS x("Username" text,"Password_Hash" text,"Salt" text,"Role" text,"Active" text)
-WHERE trim(coalesce("Username",''))<>'' ON CONFLICT ((lower(trim(username)))) DO UPDATE SET password_hash=excluded.password_hash,salt=excluded.salt,role=excluded.role,active=excluded.active;`);
+WHERE trim(coalesce("Username",''))<>'' ON CONFLICT ((lower(trim(username)))) DO NOTHING;`);
 
 const history = literal(JSON.stringify(rows('Inventory_History')));
 statements.push(`WITH source AS (SELECT DISTINCT ON (trim("Product")) trim("Product") product,coalesce("Unit",'') unit,coalesce(nullif(replace("Threshold_Limit",',',''),''),'0')::numeric threshold
@@ -70,11 +70,11 @@ JOIN inventory_days d ON d.business_date=s.business_date JOIN inventory_items i 
 ON CONFLICT(inventory_day_id,inventory_item_id) DO UPDATE SET current_qty=excluded.current_qty,in_stock=excluded.in_stock,out_stock=excluded.out_stock,closing_qty=excluded.closing_qty,unit_snapshot=excluded.unit_snapshot,threshold_snapshot=excluded.threshold_snapshot;`);
 
 statements.push(`INSERT INTO sales_ledgers(business_date,raw_row,takoyaki_sales,expenses_total,total_cash_calculated,previous_cash_added,final_total_cash,remaining_balance)
-SELECT left("Date",10)::date,to_jsonb(x),coalesce(nullif(replace("Takoyaki_Sales",',',''),''),'0')::numeric,coalesce(nullif(replace("Expenses_Total",',',''),''),'0')::numeric,
-coalesce(nullif(replace("Total_Cash_Calculated",',',''),''),'0')::numeric,coalesce(nullif(replace("Previous_Cash_Added",',',''),''),'0')::numeric,
-coalesce(nullif(replace("Final_Total_Cash",',',''),''),'0')::numeric,coalesce(nullif(replace("Remaining_Balance",',',''),''),'0')::numeric
-FROM jsonb_to_recordset(${literal(JSON.stringify(rows('Sales_Finance')))}::jsonb) AS x("Date" text,"Takoyaki_Sales" text,"Expenses_Total" text,"Total_Cash_Calculated" text,"Previous_Cash_Added" text,"Final_Total_Cash" text,"Remaining_Balance" text)
-WHERE left(coalesce("Date",''),10) ~ '^\\d{4}-\\d{2}-\\d{2}$' ON CONFLICT(business_date) DO UPDATE SET raw_row=excluded.raw_row,takoyaki_sales=excluded.takoyaki_sales,expenses_total=excluded.expenses_total,total_cash_calculated=excluded.total_cash_calculated,previous_cash_added=excluded.previous_cash_added,final_total_cash=excluded.final_total_cash,remaining_balance=excluded.remaining_balance;`);
+SELECT left(raw->>'Date',10)::date,raw,coalesce(nullif(replace(raw->>'Takoyaki_Sales',',',''),''),'0')::numeric,coalesce(nullif(replace(raw->>'Expenses_Total',',',''),''),'0')::numeric,
+coalesce(nullif(replace(raw->>'Total_Cash_Calculated',',',''),''),'0')::numeric,coalesce(nullif(replace(raw->>'Previous_Cash_Added',',',''),''),'0')::numeric,
+coalesce(nullif(replace(raw->>'Final_Total_Cash',',',''),''),'0')::numeric,coalesce(nullif(replace(raw->>'Remaining_Balance',',',''),''),'0')::numeric
+FROM jsonb_array_elements(${literal(JSON.stringify(rows('Sales_Finance')))}::jsonb) AS source(raw)
+WHERE left(coalesce(raw->>'Date',''),10) ~ '^\\d{4}-\\d{2}-\\d{2}$' ON CONFLICT(business_date) DO UPDATE SET raw_row=excluded.raw_row,takoyaki_sales=excluded.takoyaki_sales,expenses_total=excluded.expenses_total,total_cash_calculated=excluded.total_cash_calculated,previous_cash_added=excluded.previous_cash_added,final_total_cash=excluded.final_total_cash,remaining_balance=excluded.remaining_balance;`);
 statements.push(`INSERT INTO replenishment_needs(business_date,product,inventory_item_id,current_closing_qty,status)
 SELECT left(x."Date",10)::date,trim(x."Product"),i.id,coalesce(nullif(replace(x."Current_Closing_Qty",',',''),''),'0')::numeric,coalesce(x."Status",'')
 FROM jsonb_to_recordset(${literal(JSON.stringify(rows('Needs_Replenish')))}::jsonb) AS x("Date" text,"Product" text,"Current_Closing_Qty" text,"Status" text)

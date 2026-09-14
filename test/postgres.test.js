@@ -72,6 +72,9 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
 
   const bootstrap = await call('sales.bootstrap', { date: '2099-01-02' });
   assert.equal(bootstrap.products.length, 16);
+  const importedSale = await call('salesFinance.getByDate', { date: '2026-09-13' });
+  assert.ok(importedSale.row.Product_Sales_JSON, 'imported sales details must be preserved');
+  assert.equal(JSON.parse(importedSale.row.Product_Sales_JSON).Cheese, 6);
   await call('salesFinance.upsertByDate', { date: '2099-01-02', row: { Takoyaki_Sales: 100, Previous_Cash_Added: 10 } });
   const sales = await call('salesFinance.getByDate', { date: '2099-01-02' });
   assert.equal(sales.row.Final_Total_Cash, 110);

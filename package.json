@@ -14,7 +14,8 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:import": "node scripts/import-xlsx.mjs",
     "db:import:dry-run": "node scripts/import-xlsx.mjs --dry-run",
-    "db:import:sql": "node scripts/generate-sql-import.mjs"
+    "db:import:sql": "node scripts/generate-sql-import.mjs",
+    "db:reset-user": "node scripts/reset-user.mjs"
   },
   "dependencies": {
     "exceljs": "4.4.0",

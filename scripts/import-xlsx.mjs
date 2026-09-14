@@ -50,7 +50,7 @@ async function loadNormalized() {
     const username = String(raw.Username || '').trim();
     if (!username) continue;
     await client.query(`insert into users(username,password_hash,salt,role,active) values($1,$2,$3,$4,$5)
-      on conflict ((lower(trim(username)))) do update set password_hash=excluded.password_hash,salt=excluded.salt,role=excluded.role,active=excluded.active`,
+      on conflict ((lower(trim(username)))) do nothing`,
     [username, String(raw.Password_Hash || ''), String(raw.Salt || ''), String(raw.Role || 'staff'), enabled(raw.Active)]);
   }
   const historyJson = JSON.stringify(sheet('Inventory_History').map(({ raw }) => raw));
