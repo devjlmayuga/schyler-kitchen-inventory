@@ -76,7 +76,11 @@ export default function FaceAttendancePanel({ staff = [], onRecorded }) {
       {message ? <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</div> : null}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
         <div>
-          <video ref={videoRef} muted playsInline className="aspect-video w-full rounded-xl bg-slate-900 object-cover" />
+          <div className="relative mx-auto aspect-[3/4] w-full max-w-[300px] overflow-hidden rounded-[50%] border-4 border-white bg-slate-900 shadow-[0_0_0_3px_rgba(225,51,72,0.28),0_16px_40px_rgba(15,23,42,0.22)]">
+            <video ref={videoRef} muted playsInline className="h-full w-full scale-x-[-1] object-cover" />
+            {!cameraReady ? <div className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-900/25 px-8 text-center text-xs font-semibold text-white">Position your face inside the frame</div> : null}
+            <div className="pointer-events-none absolute inset-[10%] rounded-[50%] border border-dashed border-white/65" aria-hidden="true" />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="md-btn md-btn-outline" onClick={startCamera} disabled={busy}>Start Camera</button>
             <button type="button" className="md-btn md-btn-primary" onClick={checkIn} disabled={busy || !cameraReady}>{busy ? 'Scanning…' : 'Face Check In'}</button>
