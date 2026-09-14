@@ -5,7 +5,7 @@ import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import DateInput from '../components/inputs/DateInput.jsx';
-import { apiGet, apiPost } from '../lib/googleSheetsApi.js';
+import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
 import { formatMoney, parseMoney } from '../lib/money.js';
 import TextInput from '../components/inputs/TextInput.jsx';
@@ -613,10 +613,10 @@ export default function SalesPage() {
             </div>
             <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-end">
               <div className="w-full sm:w-[160px]">
-                <DateInput label="From" value={fromDate} onChange={setFromDate} />
+                <DateInput label="From" value={fromDate} onChange={(value) => { setFromDate(value); if (toDate < value) setToDate(value); }} />
               </div>
               <div className="w-full sm:w-[160px]">
-                <DateInput label="To" value={toDate} onChange={setToDate} />
+                <DateInput label="To" value={toDate} min={fromDate} onChange={setToDate} />
               </div>
               <button
                 type="button"

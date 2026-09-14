@@ -5,7 +5,7 @@ import DateInput from '../components/inputs/DateInput.jsx';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
 import TextInput from '../components/inputs/TextInput.jsx';
-import { apiGet, apiPost } from '../lib/googleSheetsApi.js';
+import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
 import { formatMoney } from '../lib/money.js';
 
@@ -112,7 +112,22 @@ function smoothBezierPath(points) {
   return d;
 }
 
-function SalesSmoothLineChart({ points, height = 260, color = '#E03348' }) {
+function chartTickIndexes(labels) {
+  if (!labels.length) return [];
+  if (labels.length <= 7) return labels.map((_, index) => index);
+  const step = Math.ceil(labels.length / 6);
+  const indexes = [];
+  for (let index = 0; index < labels.length; index += step) indexes.push(index);
+  if (indexes[indexes.length - 1] !== labels.length - 1) indexes.push(labels.length - 1);
+  return indexes;
+}
+
+function shortChartLabel(label) {
+  const value = String(label || '');
+  return value.length > 5 ? value.slice(5) : value;
+}
+
+function SalesSmoothLineChart({ points = [], height = 260, color = '#E03348' }) {
   const w = 820;
   const h = height;
   const padL = 54;
@@ -135,15 +150,7 @@ function SalesSmoothLineChart({ points, height = 260, color = '#E03348' }) {
   const pts = points.map((p, idx) => ({ x: xAt(idx), y: yAt(toNumber(p.sales)), label: p.label, v: toNumber(p.sales) }));
   const d = smoothBezierPath(pts.map(({ x, y }) => ({ x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) })));
 
-  const xTickIdxs = (() => {
-    if (labels.length <= 1) return [0];
-    if (labels.length <= 7) return labels.map((_, i) => i);
-    const step = Math.ceil(labels.length / 6);
-    const idxs = [];
-    for (let i = 0; i < labels.length; i += step) idxs.push(i);
-    if (idxs[idxs.length - 1] !== labels.length - 1) idxs.push(labels.length - 1);
-    return idxs;
-  })();
+  const xTickIdxs = chartTickIndexes(labels);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-b from-white to-slate-50">
@@ -167,7 +174,7 @@ function SalesSmoothLineChart({ points, height = 260, color = '#E03348' }) {
         {/* X labels */}
         {xTickIdxs.map((idx) => (
           <text key={`x-${idx}`} x={xAt(idx)} y={h - 12} textAnchor="middle" fontSize="11" fill="#64748b">
-            {labels[idx].slice(5)}
+            {shortChartLabel(labels[idx])}
           </text>
         ))}
 
@@ -189,7 +196,7 @@ function SalesSmoothLineChart({ points, height = 260, color = '#E03348' }) {
   );
 }
 
-function SalesExpensesBarChart({ points, height = 260, colors = { sales: '#E03348', expenses: '#8E0006' } }) {
+function SalesExpensesBarChart({ points = [], height = 260, colors = { sales: '#E03348', expenses: '#8E0006' } }) {
   const w = 820;
   const h = height;
   const padL = 54;
@@ -214,15 +221,7 @@ function SalesExpensesBarChart({ points, height = 260, colors = { sales: '#E0334
   const xGroup = (idx) => padL + idx * groupW;
   const yAt = (v) => padT + (1 - Math.max(0, v) / (yMax || 1)) * innerH;
 
-  const xTickIdxs = (() => {
-    if (labels.length <= 1) return [0];
-    if (labels.length <= 7) return labels.map((_, i) => i);
-    const step = Math.ceil(labels.length / 6);
-    const idxs = [];
-    for (let i = 0; i < labels.length; i += step) idxs.push(i);
-    if (idxs[idxs.length - 1] !== labels.length - 1) idxs.push(labels.length - 1);
-    return idxs;
-  })();
+  const xTickIdxs = chartTickIndexes(labels);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-b from-white to-slate-50">
@@ -293,7 +292,7 @@ function SalesExpensesBarChart({ points, height = 260, colors = { sales: '#E0334
             fontSize="11"
             fill="#64748b"
           >
-            {labels[idx].slice(5)}
+            {shortChartLabel(labels[idx])}
           </text>
         ))}
       </svg>
@@ -456,7 +455,7 @@ function ProductQtyBarChart({ items, height = 360, color = '#E03348' }) {
   );
 }
 
-function LineChartWithAxes({ points, height = 240, series }) {
+function LineChartWithAxes({ points = [], height = 240, series = [] }) {
   const w = 820;
   const h = height;
   const padL = 54;
@@ -487,15 +486,7 @@ function LineChartWithAxes({ points, height = 240, series }) {
     return { ...s, d };
   });
 
-  const xTickIdxs = (() => {
-    if (labels.length <= 1) return [0];
-    if (labels.length <= 7) return labels.map((_, i) => i);
-    const step = Math.ceil(labels.length / 6);
-    const idxs = [];
-    for (let i = 0; i < labels.length; i += step) idxs.push(i);
-    if (idxs[idxs.length - 1] !== labels.length - 1) idxs.push(labels.length - 1);
-    return idxs;
-  })();
+  const xTickIdxs = chartTickIndexes(labels);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-b from-white to-slate-50">
@@ -526,7 +517,7 @@ function LineChartWithAxes({ points, height = 240, series }) {
             fontSize="11"
             fill="#64748b"
           >
-            {labels[idx].slice(5)}
+            {shortChartLabel(labels[idx])}
           </text>
         ))}
 
@@ -579,7 +570,6 @@ export default function AdminPage() {
   const [attendance, setAttendance] = useState({});
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState('');
-  const [attendanceSuccess, setAttendanceSuccess] = useState('');
   const attendanceDays = useMemo(() => listDays(attendanceWeek, addDays(attendanceWeek, 6), 7), [attendanceWeek]);
 
   const loadReport = useCallback(async () => {
@@ -918,7 +908,7 @@ export default function AdminPage() {
     setSalesSuccess('');
     try {
       const data = await apiGet('salesConfig.get');
-      setSalesCfg({ ...DEFAULT_SALES_CONFIG, ...(data || {}) });
+      setSalesCfg({ ...DEFAULT_SALES_CONFIG, ...(data?.config || {}) });
     } catch (e) {
       setSalesError(e?.message || 'Failed to load sales settings');
     }
@@ -931,7 +921,6 @@ export default function AdminPage() {
 
   const loadAttendance = useCallback(async () => {
     setAttendanceError('');
-    setAttendanceSuccess('');
     setAttendanceLoading(true);
     try {
       const data = await apiGet('attendance.listWeek', { weekStart: attendanceWeek });
@@ -951,31 +940,6 @@ export default function AdminPage() {
     if (tab !== 'attendance') return;
     loadAttendance();
   }, [loadAttendance, tab]);
-
-  function toggleAttendance(staff, date) {
-    const key = `${staff}\n${date}`;
-    setAttendance((prev) => ({ ...prev, [key]: !prev[key] }));
-    setAttendanceSuccess('');
-  }
-
-  async function saveAttendance() {
-    setAttendanceError('');
-    setAttendanceSuccess('');
-    setAttendanceLoading(true);
-    try {
-      const records = (salesCfg.staff || []).flatMap((staff) =>
-        attendanceDays.map((date) => ({ staff, date, onDuty: Boolean(attendance[`${staff}\n${date}`]) })),
-      );
-      await apiPost('attendance.saveWeek', { weekStart: attendanceWeek, records });
-      setAttendanceSuccess('Weekly attendance saved.');
-      await loadAttendance();
-      setAttendanceSuccess('Weekly attendance saved.');
-    } catch (e) {
-      setAttendanceError(e?.message || 'Failed to save attendance');
-    } finally {
-      setAttendanceLoading(false);
-    }
-  }
 
   async function saveSalesCfg() {
     setSalesError('');
@@ -1111,10 +1075,10 @@ export default function AdminPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="w-full sm:w-[180px]">
-                  <DateInput label="From" value={from} onChange={setFrom} />
+                  <DateInput label="From" value={from} onChange={(value) => { setFrom(value); if (to < value) setTo(value); }} />
                 </div>
                 <div className="w-full sm:w-[180px]">
-                  <DateInput label="To" value={to} onChange={setTo} />
+                  <DateInput label="To" value={to} min={from} onChange={setTo} />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1272,17 +1236,11 @@ export default function AdminPage() {
       {tab === 'attendance' ? (
         <div className="space-y-3">
           <ErrorBanner message={attendanceError} onRetry={loadAttendance} />
-          {attendanceSuccess ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              {attendanceSuccess}
-            </div>
-          ) : null}
-
           <div className="md-card p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="text-sm font-semibold">Weekly Staff Attendance</div>
-                <div className="mt-1 text-xs text-slate-600">Each week starts Sunday and ends Saturday.</div>
+                <div className="mt-1 text-xs text-slate-600">Automatically marked on duty when the business has a sales record. Each week starts Sunday and ends Saturday.</div>
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <button type="button" onClick={() => setAttendanceWeek(addDays(attendanceWeek, -7))} className="md-btn md-btn-outline h-[42px]">
@@ -1293,9 +1251,6 @@ export default function AdminPage() {
                 </div>
                 <button type="button" onClick={() => setAttendanceWeek(addDays(attendanceWeek, 7))} className="md-btn md-btn-outline h-[42px]">
                   Next
-                </button>
-                <button type="button" onClick={saveAttendance} disabled={attendanceLoading || !(salesCfg.staff || []).length} className="md-btn md-btn-primary h-[42px]">
-                  Save Attendance
                 </button>
               </div>
             </div>
@@ -1326,13 +1281,11 @@ export default function AdminPage() {
                       <td className="px-3 py-3 text-left font-semibold">{staff}</td>
                       {attendanceDays.map((date) => (
                         <td key={date} className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(attendance[`${staff}\n${date}`])}
-                            onChange={() => toggleAttendance(staff, date)}
-                            aria-label={`${staff} on duty ${date}`}
-                            className="h-5 w-5 accent-[var(--p-5)]"
-                          />
+                          {attendance[`${staff}\n${date}`] ? (
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700" aria-label={`${staff} on duty ${date}`}>✓</span>
+                          ) : (
+                            <span className="text-slate-300" aria-label={`${staff} off duty ${date}`}>—</span>
+                          )}
                         </td>
                       ))}
                       <td className="px-3 py-3">

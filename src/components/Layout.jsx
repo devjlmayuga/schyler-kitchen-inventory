@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { clearSession, getSessionToken, getUser, isLoggedIn, setLocked } from '../lib/auth.js';
-import { apiGet } from '../lib/googleSheetsApi.js';
+import { apiGet } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
 import { parseQty } from '../lib/numbers.js';
 

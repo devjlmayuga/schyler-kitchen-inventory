@@ -1,28 +1,37 @@
-function getEnv(name) {
-  return (typeof process !== 'undefined' && process.env && process.env[name]) || '';
-}
-
-const API_URL = getEnv('NEXT_PUBLIC_GOOGLE_SHEETS_API_URL') || '/api/si';
-const API_TOKEN = getEnv('NEXT_PUBLIC_GOOGLE_SHEETS_API_TOKEN');
+const API_URL = '/api/si';
 
 const GET_CACHE_TTL_MS = 30_000;
-const GET_CACHEABLE_ACTIONS = new Set(['items.list', 'products.list', 'salesConfig.get']);
+const GET_CACHEABLE_ACTIONS = new Set(['items.list', 'products.list', 'salesConfig.get', 'inventory.getOrSeed']);
 const _inFlight = new Map();
 const _getCache = new Map();
+
+const INVALIDATE_AFTER_WRITE = {
+  'inventory.submit': ['inventory.getOrSeed'],
+  'inventory.deleteDay': ['inventory.getOrSeed'],
+  'inventory.setClosed': ['inventory.getOrSeed'],
+  'inventory.seedTemplate': ['inventory.getOrSeed'],
+  'items.upsert': ['items.list', 'inventory.getOrSeed'],
+  'items.upsertMany': ['items.list', 'inventory.getOrSeed'],
+  'items.delete': ['items.list', 'inventory.getOrSeed'],
+  'thresholds.update': ['items.list', 'inventory.getOrSeed'],
+  'products.upsert': ['products.list'],
+  'products.upsertMany': ['products.list'],
+  'products.delete': ['products.list'],
+  'salesConfig.save': ['salesConfig.get'],
+};
+
+function invalidateActions(actions) {
+  const prefixes = (actions || []).map((action) => `${action}?`);
+  for (const key of _getCache.keys()) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) _getCache.delete(key);
+  }
+}
 
 function getSessionToken() {
   try {
     return window.localStorage.getItem('si_session_token') || '';
   } catch {
     return '';
-  }
-}
-
-function isLocked() {
-  try {
-    return window.localStorage.getItem('si_locked') === '1';
-  } catch {
-    return false;
   }
 }
 
@@ -34,23 +43,13 @@ export class ApiError extends Error {
   }
 }
 
-function requireConfig() {
-  if (!API_URL) {
-    throw new ApiError('Missing VITE_GOOGLE_SHEETS_API_URL', 'MISSING_CONFIG');
-  }
-}
-
 function isPublicAction(action) {
   return action === 'auth.login';
 }
 
 function buildAuthParams(action) {
-  // Prefer per-user session when available (so staff/admin roles work even if API token is configured).
   const session = getSessionToken();
   if (session) return { session };
-
-  // When locked, force session-based auth even if an API token exists (for "Logout/Lock" behavior).
-  if (API_TOKEN && !isLocked()) return { token: API_TOKEN };
   if (isPublicAction(action)) return {};
   throw new ApiError('Not authenticated. Please login.', 'UNAUTHENTICATED');
 }
@@ -119,7 +118,6 @@ async function parseEnvelope(response) {
 }
 
 export async function apiGet(action, params = {}) {
-  requireConfig();
   const auth = buildAuthParams(action);
   const query = toQuery({ action, ...auth, ...params });
   const url = `${API_URL}?${query}`;
@@ -151,15 +149,13 @@ export async function apiGet(action, params = {}) {
 }
 
 export async function apiPost(action, payload = {}) {
-  requireConfig();
   const auth = buildAuthParams(action);
   const res = await fetch(API_URL, {
     method: 'POST',
-    // Use a "simple" content-type to avoid CORS preflight failures with Apps Script Web Apps.
-    // Apps Script still receives the body in `e.postData.contents` and we JSON.parse it server-side.
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    redirect: 'follow',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, ...auth, payload }),
   });
-  return parseEnvelope(res);
+  const data = await parseEnvelope(res);
+  invalidateActions(INVALIDATE_AFTER_WRITE[action]);
+  return data;
 }

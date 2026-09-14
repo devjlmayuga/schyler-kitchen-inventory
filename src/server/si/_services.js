@@ -4,8 +4,27 @@ import {
   ensureSheet,
   readSheetAsObjects,
   overwriteSheetFromObjects,
-} from './_sheets.js';
-import { getAuthDebugInfo } from './_sheets.js';
+  replaceAttendanceWeek,
+  replaceInventoryDay,
+  deleteInventoryDay as deleteInventoryDayRecord,
+  getInventoryDayOrSeed,
+  upsertSalesDay,
+  deleteSalesDay,
+  getInventorySeedTemplate,
+  findUser,
+  upsertUser,
+  upsertInventoryItems,
+  deleteInventoryItem,
+  updateInventoryThreshold,
+  upsertManualNeed,
+  deleteManualNeed,
+  saveConfig,
+  upsertProducts,
+  deleteProduct,
+  getSalesBootstrapData,
+  getAutoAttendanceWeek,
+} from './repository.js';
+import { getAuthDebugInfo } from './repository.js';
 
 const SHEET_INVENTORY = 'Inventory';
 const SHEET_INV_HISTORY = 'Inventory_History';
@@ -122,11 +141,7 @@ function jwtVerify(token, secret) {
 }
 
 function getApiToken() {
-  // Prefer SI_API_TOKEN on the server. NEXT_PUBLIC_* is only a fallback for local/dev convenience.
-  return (
-    String(process.env.SI_API_TOKEN || '').trim() ||
-    String(process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_TOKEN || '').trim()
-  );
+  return String(process.env.SI_API_TOKEN || '').trim();
 }
 
 function getJwtSecret() {
@@ -152,6 +167,18 @@ function defaultSalesConfig() {
       { key: 'Payout_Natalie', label: 'Natalie' },
     ],
     staff: [],
+  };
+}
+
+function normalizeSalesConfig(config) {
+  const defaults = defaultSalesConfig();
+  const value = config && typeof config === 'object' ? config : {};
+  return {
+    expenseBreakdown: Array.isArray(value.expenseBreakdown) ? value.expenseBreakdown : defaults.expenseBreakdown,
+    partners: Array.isArray(value.partners) ? value.partners : defaults.partners,
+    staff: Array.isArray(value.staff)
+      ? value.staff.map((name) => String(name || '').trim()).filter(Boolean)
+      : defaults.staff,
   };
 }
 
@@ -189,7 +216,7 @@ function normalizeStaffExpenses(value) {
 
 export async function requireAuth({ token, session }) {
   const expectedToken = getApiToken();
-  if (!expectedToken) throw new Error('Missing SI_API_TOKEN (or NEXT_PUBLIC_GOOGLE_SHEETS_API_TOKEN) environment variable');
+  if (!expectedToken) throw new Error('Missing SI_API_TOKEN environment variable');
 
   if (token && constantTimeEq(token, expectedToken)) {
     return { username: 'api-token', role: 'admin' };
@@ -221,11 +248,7 @@ export async function authLogin({ username, password }) {
   const secret = getJwtSecret();
   if (!secret) throw new Error('Missing SI_JWT_SECRET environment variable');
 
-  await getOrCreateUsersSheet();
-  const data = await readSheetAsObjects(SHEET_USERS);
-  assertHeaders(SHEET_USERS, data.headers, ['Username', 'Password_Hash', 'Salt', 'Role', 'Active']);
-
-  const row = data.values.find((r) => String(r.Username || '').trim().toLowerCase() === u.toLowerCase());
+  const row = await findUser(u);
   if (!row) throw new Error('Invalid username or password');
   const active = String(row.Active || '').trim().toUpperCase();
   if (active && active !== 'Y' && active !== 'YES' && active !== 'TRUE') throw new Error('Account is disabled');
@@ -247,10 +270,6 @@ export async function authAdminUpsertUser({ username, password, role, active }) 
   if (!u) throw new Error('username is required');
   if (!p) throw new Error('password is required');
 
-  await getOrCreateUsersSheet();
-  const data = await readSheetAsObjects(SHEET_USERS);
-  assertHeaders(SHEET_USERS, data.headers, ['Username', 'Password_Hash', 'Salt', 'Role', 'Active']);
-
   const salt = crypto.randomUUID().replaceAll('-', '');
   const hash = hashPassword(p, salt);
   const rowObj = {
@@ -261,19 +280,7 @@ export async function authAdminUpsertUser({ username, password, role, active }) 
     Active: String(active || 'Y'),
   };
 
-  const nextRows = [...data.values];
-  let updated = false;
-  for (let i = 0; i < nextRows.length; i++) {
-    const existing = String(nextRows[i].Username || '').trim();
-    if (!existing) continue;
-    if (existing.toLowerCase() !== u.toLowerCase()) continue;
-    nextRows[i] = rowObj;
-    updated = true;
-    break;
-  }
-  if (!updated) nextRows.push(rowObj);
-
-  await overwriteSheetFromObjects(SHEET_USERS, data.headers, nextRows);
+  const updated = await upsertUser(rowObj);
   return { username: u, role: r, updated };
 }
 
@@ -287,17 +294,11 @@ async function ensureAttendanceSheet() {
 export async function attendanceListWeek({ weekStart }) {
   if (!isIsoDate(weekStart)) throw new Error('payload.weekStart must be YYYY-MM-DD');
   const weekEnd = addDaysIso(weekStart, 6);
-  await ensureAttendanceSheet();
-  const sheet = await readSheetAsObjects(SHEET_ATTENDANCE);
-  assertHeaders(SHEET_ATTENDANCE, sheet.headers, ['Date', 'Staff', 'On_Duty']);
-  const records = sheet.values
-    .map((r) => ({
-      date: normalizeDateKey(r.Date),
-      staff: String(r.Staff || '').trim(),
-      onDuty: isClosedFlag(r.On_Duty),
-    }))
-    .filter((r) => r.staff && r.date >= weekStart && r.date <= weekEnd);
-  return { weekStart, weekEnd, records };
+  const data = await getAutoAttendanceWeek(weekStart, weekEnd);
+  const staff = normalizeSalesConfig(data.config).staff;
+  const openDates = data.openDates;
+  const records = staff.flatMap((name) => openDates.map((date) => ({ date, staff: name, onDuty: true })));
+  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales' };
 }
 
 export async function attendanceSaveWeek({ weekStart, records }) {
@@ -305,13 +306,6 @@ export async function attendanceSaveWeek({ weekStart, records }) {
   if (!Array.isArray(records)) throw new Error('payload.records must be an array');
   const weekEnd = addDaysIso(weekStart, 6);
   await ensureAttendanceSheet();
-  const sheet = await readSheetAsObjects(SHEET_ATTENDANCE);
-  assertHeaders(SHEET_ATTENDANCE, sheet.headers, ['Date', 'Staff', 'On_Duty']);
-
-  const remaining = sheet.values.filter((r) => {
-    const date = normalizeDateKey(r.Date);
-    return date < weekStart || date > weekEnd;
-  });
   const saved = records
     .map((r) => ({
       Date: String(r?.date || ''),
@@ -319,7 +313,7 @@ export async function attendanceSaveWeek({ weekStart, records }) {
       On_Duty: r?.onDuty ? 'Y' : 'N',
     }))
     .filter((r) => isIsoDate(r.Date) && r.Date >= weekStart && r.Date <= weekEnd && r.Staff);
-  await overwriteSheetFromObjects(SHEET_ATTENDANCE, sheet.headers, remaining.concat(saved));
+  await replaceAttendanceWeek(weekStart, weekEnd, saved);
   return { weekStart, weekEnd, saved: saved.length };
 }
 
@@ -328,16 +322,6 @@ export async function attendanceSaveWeek({ weekStart, records }) {
 async function ensureInventorySheet() {
   await ensureSheet({ title: SHEET_INVENTORY, headers: ['Product', 'Unit', 'Threshold_Limit'] });
   await ensureHeaders(SHEET_INVENTORY, ['Product', 'Unit', 'Threshold_Limit']);
-}
-
-function indexByProduct(values) {
-  const map = {};
-  values.forEach((r, idx) => {
-    const p = String(r.Product || '').trim();
-    if (!p) return;
-    map[p] = idx;
-  });
-  return map;
 }
 
 export async function itemsList() {
@@ -355,52 +339,26 @@ export async function itemsList() {
 
 export async function itemsUpsert(item) {
   if (!item?.Product) throw new Error('payload.item.Product is required');
-  await ensureInventorySheet();
-  const data = await readSheetAsObjects(SHEET_INVENTORY);
-  assertHeaders(SHEET_INVENTORY, data.headers, ['Product', 'Unit', 'Threshold_Limit']);
-
   const product = String(item.Product || '').trim();
   const unit = item.Unit != null ? String(item.Unit) : '';
   const threshold = toNumber(item.Threshold_Limit);
 
-  const idx = indexByProduct(data.values);
   const rowObj = { Product: product, Unit: unit, Threshold_Limit: threshold };
-  const next = [...data.values];
-  if (idx[product] != null) next[idx[product]] = rowObj;
-  else next.push(rowObj);
-  await overwriteSheetFromObjects(SHEET_INVENTORY, data.headers, next);
+  await upsertInventoryItems([rowObj]);
 }
 
 export async function itemsUpsertMany(items) {
   if (!Array.isArray(items)) throw new Error('payload.items must be an array');
-  await ensureInventorySheet();
-  const data = await readSheetAsObjects(SHEET_INVENTORY);
-  assertHeaders(SHEET_INVENTORY, data.headers, ['Product', 'Unit', 'Threshold_Limit']);
-
-  const idx = indexByProduct(data.values);
-  const next = [...data.values];
-  let updated = 0;
-  let inserted = 0;
-
-  items.forEach((raw) => {
+  const normalized = items.map((raw) => {
     const product = String(raw?.Product || '').trim();
-    if (!product) return;
-    const rowObj = {
+    if (!product) return null;
+    return {
       Product: product,
       Unit: raw?.Unit != null ? String(raw.Unit) : '',
       Threshold_Limit: toNumber(raw?.Threshold_Limit),
     };
-    if (idx[product] != null) {
-      next[idx[product]] = rowObj;
-      updated += 1;
-    } else {
-      idx[product] = next.length;
-      next.push(rowObj);
-      inserted += 1;
-    }
-  });
-
-  await overwriteSheetFromObjects(SHEET_INVENTORY, data.headers, next);
+  }).filter(Boolean);
+  const { updated, inserted } = await upsertInventoryItems(normalized);
   return { updated, inserted, total: updated + inserted };
 }
 
@@ -408,29 +366,7 @@ export async function itemsDelete({ product }) {
   const target = String(product || '').trim();
   if (!target) return { deleted: { inventory: 0, inventoryHistory: 0, needs: 0 } };
 
-  await ensureInventorySheet();
-  await ensureSheet({ title: SHEET_INV_HISTORY, headers: ['Date', 'Product', 'Current_Qty', 'In_Stock', 'Out_Stock', 'Closing_Qty', 'Unit', 'Threshold_Limit', INV_DAY_CLOSED_COL] });
-  await ensureSheet({ title: SHEET_NEEDS, headers: ['Date', 'Product', 'Current_Closing_Qty', 'Status'] });
-
-  const inv = await readSheetAsObjects(SHEET_INVENTORY);
-  const invNext = inv.values.filter((r) => String(r.Product || '').trim() !== target);
-  await overwriteSheetFromObjects(SHEET_INVENTORY, inv.headers, invNext);
-
-  const hist = await readSheetAsObjects(SHEET_INV_HISTORY);
-  const histNext = hist.values.filter((r) => String(r.Product || '').trim() !== target);
-  await overwriteSheetFromObjects(SHEET_INV_HISTORY, hist.headers, histNext);
-
-  const needs = await readSheetAsObjects(SHEET_NEEDS);
-  const needsNext = needs.values.filter((r) => String(r.Product || '').trim() !== target);
-  await overwriteSheetFromObjects(SHEET_NEEDS, needs.headers, needsNext);
-
-  return {
-    deleted: {
-      inventory: inv.values.length - invNext.length,
-      inventoryHistory: hist.values.length - histNext.length,
-      needs: needs.values.length - needsNext.length,
-    },
-  };
+  return { deleted: await deleteInventoryItem(target) };
 }
 
 export async function thresholdsGet() {
@@ -450,15 +386,7 @@ export async function thresholdsGet() {
 export async function thresholdsUpdate({ product, threshold }) {
   const p = String(product || '').trim();
   if (!p) throw new Error('payload.product is required');
-  await ensureInventorySheet();
-  const data = await readSheetAsObjects(SHEET_INVENTORY);
-  assertHeaders(SHEET_INVENTORY, data.headers, ['Product', 'Threshold_Limit']);
-  const idx = indexByProduct(data.values);
-  const i = idx[p];
-  if (i == null) throw new Error(`Product not found in Inventory: ${p}`);
-  const next = [...data.values];
-  next[i] = { ...next[i], Threshold_Limit: toNumber(threshold) };
-  await overwriteSheetFromObjects(SHEET_INVENTORY, data.headers, next);
+  if (!(await updateInventoryThreshold(p, toNumber(threshold)))) throw new Error(`Product not found in Inventory: ${p}`);
 }
 
 // ---------------- Inventory History (per-day CRUD) ----------------
@@ -488,7 +416,7 @@ function normalizeInventoryHistoryRow(r) {
 export async function inventoryGet({ date }) {
   if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
   await ensureInventoryHistorySheet();
-  const history = await readSheetAsObjects(SHEET_INV_HISTORY);
+  const history = await readSheetAsObjects(SHEET_INV_HISTORY, { date });
   assertHeaders(SHEET_INV_HISTORY, history.headers, ['Date', 'Product']);
   const histRows = history.values
     .filter((r) => normalizeDateKey(r.Date) === date)
@@ -498,30 +426,20 @@ export async function inventoryGet({ date }) {
 }
 
 export async function inventoryGetOrSeed({ date }) {
-  const existing = await inventoryGet({ date });
-  if (existing.items?.length) return { date: existing.date || date, seeded: false, closed: !!existing.closed, items: existing.items };
-  const seeded = await inventorySeedTemplate({ date });
-  return { ...seeded, seeded: true, closed: false };
+  if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
+  const result = await getInventoryDayOrSeed(date);
+  return { ...result, items: result.items.map((row) => normalizeInventoryHistoryRow({ ...row, Date: date })) };
 }
 
 export async function inventoryDeleteDay({ date }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
-  await ensureInventoryHistorySheet();
-  const sheet = await readSheetAsObjects(SHEET_INV_HISTORY);
-  assertHeaders(SHEET_INV_HISTORY, sheet.headers, ['Date']);
-  const next = sheet.values.filter((r) => normalizeDateKey(r.Date) !== date);
-  await overwriteSheetFromObjects(SHEET_INV_HISTORY, sheet.headers, next);
-  return sheet.values.length - next.length;
+  return deleteInventoryDayRecord(date);
 }
 
 export async function inventorySubmit({ date, items }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
   if (!Array.isArray(items)) throw new Error('payload.items must be an array');
   await ensureInventoryHistorySheet();
-  const history = await readSheetAsObjects(SHEET_INV_HISTORY);
-  assertHeaders(SHEET_INV_HISTORY, history.headers, ['Date', 'Product']);
-
-  const remaining = history.values.filter((r) => normalizeDateKey(r.Date) !== date);
   const newRows = items.map((raw) => ({
     Date: date,
     Product: String(raw?.Product || '').trim(),
@@ -534,64 +452,14 @@ export async function inventorySubmit({ date, items }) {
     [INV_DAY_CLOSED_COL]: isClosedFlag(raw?.[INV_DAY_CLOSED_COL]) ? 'Y' : '',
   }));
 
-  await overwriteSheetFromObjects(SHEET_INV_HISTORY, history.headers, remaining.concat(newRows));
+  await replaceInventoryDay(date, newRows);
   return items.length;
-}
-
-async function inventoryFindLastOpenDateBefore({ date }) {
-  await ensureInventoryHistorySheet();
-  const history = await readSheetAsObjects(SHEET_INV_HISTORY);
-  assertHeaders(SHEET_INV_HISTORY, history.headers, ['Date', 'Product']);
-
-  const datesWithAnyRows = new Set();
-  const closedDates = new Set();
-  history.values.forEach((r) => {
-    const d = normalizeDateKey(r.Date);
-    if (!d || d >= date) return;
-    const product = String(r.Product || '').trim();
-    if (!product) return;
-    datesWithAnyRows.add(d);
-    if (isClosedFlag(r[INV_DAY_CLOSED_COL])) closedDates.add(d);
-  });
-
-  const candidates = Array.from(datesWithAnyRows).sort();
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    const d = candidates[i];
-    if (!closedDates.has(d)) return d;
-  }
-  return candidates.length ? candidates[candidates.length - 1] : '';
 }
 
 export async function inventorySeedTemplate({ date }) {
   if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
-  const seedFrom = await inventoryFindLastOpenDateBefore({ date });
-  const itemsRes = await itemsList();
-  const prevRes = seedFrom ? await inventoryGet({ date: seedFrom }) : { items: [] };
-  const prevItems = Array.isArray(prevRes.items) ? prevRes.items : [];
-  const prevClosingByProduct = {};
-  prevItems.forEach((r) => {
-    const p = String(r.Product || '').trim();
-    if (!p) return;
-    prevClosingByProduct[p] = toNumber(r.Closing_Qty);
-  });
-
-  const template = (itemsRes.items || []).map((it) => {
-    const p = String(it.Product || '').trim();
-    const prev = prevClosingByProduct[p] || 0;
-    return {
-      Date: date,
-      Product: p,
-      Current_Qty: prev,
-      In_Stock: 0,
-      Out_Stock: 0,
-      Closing_Qty: prev,
-      Unit: it.Unit != null ? String(it.Unit) : '',
-      Threshold_Limit: toNumber(it.Threshold_Limit),
-      [INV_DAY_CLOSED_COL]: '',
-    };
-  });
-
-  return { date, seededFrom: seedFrom || null, items: template };
+  const result = await getInventorySeedTemplate(date);
+  return { ...result, items: result.items.map((row) => normalizeInventoryHistoryRow({ ...row, Date: date })) };
 }
 
 export async function inventorySetClosed({ date, closed }) {
@@ -636,7 +504,7 @@ export async function needsList({ date, source }) {
   const dateKey = isIsoDate(date) ? date : '';
   if (!dateKey) throw new Error('date is required (YYYY-MM-DD)');
   await ensureNeedsSheet();
-  const sheet = await readSheetAsObjects(SHEET_NEEDS);
+  const sheet = await readSheetAsObjects(SHEET_NEEDS, { date: dateKey });
   assertHeaders(SHEET_NEEDS, sheet.headers, ['Date', 'Product', 'Status']);
   const items = sheet.values
     .filter((r) => normalizeDateKey(r.Date) === dateKey)
@@ -655,14 +523,7 @@ export async function needsList({ date, source }) {
 export async function needsManualUpsert({ date, item }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
   if (!item?.Product) throw new Error('payload.item.Product is required');
-  await ensureNeedsSheet();
-  const sheet = await readSheetAsObjects(SHEET_NEEDS);
-  assertHeaders(SHEET_NEEDS, sheet.headers, ['Date', 'Product', 'Status']);
-
   const product = String(item.Product || '').trim();
-  const remaining = sheet.values.filter(
-    (r) => !(normalizeDateKey(r.Date) === date && String(r.Product || '').trim() === product && String(r.Status || '') === 'NEEDS_MANUAL'),
-  );
   const rowObj = {
     Date: date,
     Product: product,
@@ -670,18 +531,14 @@ export async function needsManualUpsert({ date, item }) {
     Status: 'NEEDS_MANUAL',
   };
 
-  await overwriteSheetFromObjects(SHEET_NEEDS, sheet.headers, remaining.concat([rowObj]));
+  await upsertManualNeed(date, rowObj);
 }
 
 export async function needsManualRemove({ date, product }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
   const target = String(product || '').trim();
   if (!target) throw new Error('payload.Product is required');
-  await ensureNeedsSheet();
-  const sheet = await readSheetAsObjects(SHEET_NEEDS);
-  assertHeaders(SHEET_NEEDS, sheet.headers, ['Date', 'Product']);
-  const next = sheet.values.filter((r) => !(normalizeDateKey(r.Date) === date && String(r.Product || '').trim() === target));
-  await overwriteSheetFromObjects(SHEET_NEEDS, sheet.headers, next);
+  await deleteManualNeed(date, target);
 }
 
 // ---------------- Config (Sales config) ----------------
@@ -700,27 +557,14 @@ export async function salesConfigGet() {
   if (!raw) return { config: defaultSalesConfig() };
   try {
     const parsed = JSON.parse(raw);
-    return { config: { ...defaultSalesConfig(), ...(parsed || {}) } };
+    return { config: normalizeSalesConfig(parsed) };
   } catch {
     return { config: defaultSalesConfig() };
   }
 }
 
 export async function salesConfigSave(config) {
-  await ensureConfigSheet();
-  const sheet = await readSheetAsObjects(SHEET_CONFIG);
-  const json = JSON.stringify(config);
-  const next = [...sheet.values];
-  let updated = false;
-  for (let i = 0; i < next.length; i++) {
-    const key = String(next[i].Key || '').trim();
-    if (key !== 'sales_config') continue;
-    next[i] = { ...next[i], Key: 'sales_config', Value: json };
-    updated = true;
-    break;
-  }
-  if (!updated) next.push({ Key: 'sales_config', Value: json });
-  await overwriteSheetFromObjects(SHEET_CONFIG, sheet.headers, next);
+  await saveConfig('sales_config', normalizeSalesConfig(config));
 }
 
 // ---------------- Products ----------------
@@ -747,72 +591,34 @@ export async function productsList() {
 
 export async function productsUpsert(raw) {
   if (!raw?.Name) throw new Error('payload.item.Name is required');
-  await ensureProductsSheet();
-  const sheet = await readSheetAsObjects(SHEET_PRODUCTS);
-  assertHeaders(SHEET_PRODUCTS, sheet.headers, ['Name', 'Price']);
-
   const name = String(raw.Name || '').trim();
   const category = String(raw.Category || '').trim();
   const price = toNumber(raw.Price);
   const active = raw.Active == null ? 'Y' : String(raw.Active || '').trim() || 'Y';
 
-  const next = [...sheet.values];
-  let updated = false;
-  for (let i = 0; i < next.length; i++) {
-    const n = String(next[i].Name || '').trim();
-    if (n !== name) continue;
-    next[i] = { ...next[i], Category: category, Name: name, Price: price, Active: active };
-    updated = true;
-    break;
-  }
-  if (!updated) next.push({ Category: category, Name: name, Price: price, Active: active });
-  await overwriteSheetFromObjects(SHEET_PRODUCTS, sheet.headers, next);
+  await upsertProducts([{ Category: category, Name: name, Price: price, Active: active }]);
 }
 
 export async function productsUpsertMany(items) {
   if (!Array.isArray(items)) throw new Error('payload.items must be an array');
-  await ensureProductsSheet();
-  const sheet = await readSheetAsObjects(SHEET_PRODUCTS);
-  assertHeaders(SHEET_PRODUCTS, sheet.headers, ['Name', 'Price']);
-
-  const next = [...sheet.values];
-  const index = new Map(next.map((r, i) => [String(r.Name || '').trim(), i]));
-  let upserts = 0;
-  let appends = 0;
-
-  items.forEach((raw) => {
+  const normalized = items.map((raw) => {
     const name = String(raw?.Name || '').trim();
-    if (!name) return;
-    const rowObj = {
+    if (!name) return null;
+    return {
       Category: String(raw?.Category || '').trim(),
       Name: name,
       Price: toNumber(raw?.Price),
       Active: raw?.Active == null ? 'Y' : String(raw.Active || '').trim() || 'Y',
     };
-    const i = index.get(name);
-    if (i != null) {
-      next[i] = rowObj;
-      upserts += 1;
-    } else {
-      index.set(name, next.length);
-      next.push(rowObj);
-      appends += 1;
-    }
-  });
-
-  await overwriteSheetFromObjects(SHEET_PRODUCTS, sheet.headers, next);
+  }).filter(Boolean);
+  const { upserts, appends } = await upsertProducts(normalized);
   return { upserts, appends, total: upserts + appends };
 }
 
 export async function productsDelete({ name }) {
   const target = String(name || '').trim();
   if (!target) return 0;
-  await ensureProductsSheet();
-  const sheet = await readSheetAsObjects(SHEET_PRODUCTS);
-  assertHeaders(SHEET_PRODUCTS, sheet.headers, ['Name']);
-  const next = sheet.values.filter((r) => String(r.Name || '').trim() !== target);
-  await overwriteSheetFromObjects(SHEET_PRODUCTS, sheet.headers, next);
-  return sheet.values.length - next.length;
+  return deleteProduct(target);
 }
 
 // ---------------- Sales / Finance ----------------
@@ -850,7 +656,7 @@ function normalizeSalesRow(row) {
 export async function salesFinanceGetByDate({ date }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
   await ensureSalesSheet();
-  const sheet = await readSheetAsObjects(SHEET_SALES);
+  const sheet = await readSheetAsObjects(SHEET_SALES, { date });
   assertHeaders(SHEET_SALES, sheet.headers, ['Date']);
   const matches = sheet.values.filter((r) => normalizeDateKey(r.Date) === date);
   if (!matches.length) return { date, row: null };
@@ -859,12 +665,7 @@ export async function salesFinanceGetByDate({ date }) {
 
 export async function salesFinanceDeleteByDate({ date }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
-  await ensureSalesSheet();
-  const sheet = await readSheetAsObjects(SHEET_SALES);
-  assertHeaders(SHEET_SALES, sheet.headers, ['Date']);
-  const next = sheet.values.filter((r) => normalizeDateKey(r.Date) !== date);
-  await overwriteSheetFromObjects(SHEET_SALES, sheet.headers, next);
-  return sheet.values.length - next.length;
+  return deleteSalesDay(date);
 }
 
 export async function salesFinanceUpsertByDate({ date, row }) {
@@ -879,7 +680,6 @@ export async function salesFinanceUpsertByDate({ date, row }) {
 
   const extraHeaders = breakdownKeys.concat([OTHER_EXPENSES_REMARK_KEY, 'Staff_Expenses_JSON', 'Staff_Expenses_Total', 'Product_Sales_JSON', 'Product_Sales_Total']);
   await ensureSalesSheet(extraHeaders);
-  const sheet = await readSheetAsObjects(SHEET_SALES);
 
   // Build computed fields (mirrors Apps Script)
   const takoyakiSales = toNumber(row.Takoyaki_Sales);
@@ -914,8 +714,7 @@ export async function salesFinanceUpsertByDate({ date, row }) {
   if (row.Product_Sales_JSON != null) normalized.Product_Sales_JSON = String(row.Product_Sales_JSON || '');
   normalized.Product_Sales_Total = takoyakiSales;
 
-  const remainingRows = sheet.values.filter((r) => normalizeDateKey(r.Date) !== date);
-  await overwriteSheetFromObjects(SHEET_SALES, sheet.headers, remainingRows.concat([normalized]));
+  await upsertSalesDay(date, normalized);
   return { date };
 }
 
@@ -923,7 +722,7 @@ export async function salesFinanceList({ from, to }) {
   const fromKey = from && isIsoDate(from) ? from : '';
   const toKey = to && isIsoDate(to) ? to : '';
   await ensureSalesSheet();
-  const sheet = await readSheetAsObjects(SHEET_SALES);
+  const sheet = await readSheetAsObjects(SHEET_SALES, { from: fromKey, to: toKey });
   assertHeaders(SHEET_SALES, sheet.headers, ['Date']);
   const rows = sheet.values
     .map((r) => normalizeSalesRow(r))
@@ -939,12 +738,13 @@ export async function salesFinanceList({ from, to }) {
 
 export async function salesBootstrap({ date }) {
   if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
-  const [cfg, prods, row] = await Promise.all([
-    salesConfigGet(),
-    productsList(),
-    salesFinanceGetByDate({ date }),
-  ]);
-  return { date, config: cfg.config, products: prods.items || [], row: row.row };
+  const data = await getSalesBootstrapData(date);
+  return {
+    date,
+    config: normalizeSalesConfig(data.config),
+    products: data.products.map((row) => ({ ...row, Price: toNumber(row.Price) })),
+    row: data.row ? normalizeSalesRow(data.row) : null,
+  };
 }
 
 // ---------------- Debug helpers ----------------

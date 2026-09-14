@@ -33,8 +33,9 @@ import {
   thresholdsUpdate,
   debugAuthInfo,
 } from './_services.js';
+import { withStorageTransaction } from './repository.js';
 
-export async function dispatchAction({ action, token, session, payload }) {
+async function dispatchActionInternal({ action, token, session, payload }) {
   switch (String(action || '')) {
     // Auth
     case 'auth.me': {
@@ -226,4 +227,8 @@ export async function dispatchAction({ action, token, session, payload }) {
     default:
       throw new Error(`Unknown action: ${action}`);
   }
+}
+
+export async function dispatchAction(request) {
+  return withStorageTransaction(String(request?.action || ''), () => dispatchActionInternal(request));
 }

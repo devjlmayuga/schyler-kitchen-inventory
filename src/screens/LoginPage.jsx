@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
-import { apiPost } from '../lib/googleSheetsApi.js';
+import { apiPost } from '../lib/apiClient.js';
 import { isLoggedIn, setLocked, setSession } from '../lib/auth.js';
 
 export default function LoginPage({ from: fromProp } = {}) {

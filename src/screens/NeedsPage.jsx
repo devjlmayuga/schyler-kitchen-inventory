@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import ErrorBanner from '../components/ErrorBanner.jsx';
 import FullscreenLoading from '../components/FullscreenLoading.jsx';
 import DateInput from '../components/inputs/DateInput.jsx';
-import { apiGet, apiPost } from '../lib/googleSheetsApi.js';
+import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
 import { parseQty } from '../lib/numbers.js';
 

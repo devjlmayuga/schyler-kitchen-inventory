@@ -4,3 +4,9 @@ node_modules
 # Secrets / credentials
 sandbox-jl-498113-809922f5abce.json
 .next
+
+# Local/preview secrets and generated migration reports
+.env
+.env.local
+.env.*.local
+migration-reports/
