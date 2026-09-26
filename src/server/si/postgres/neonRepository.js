@@ -29,7 +29,7 @@ export async function readSheetAsObjects(name, filter = {}) {
       result = await dbClient().query(`select d.business_date::text "Date",i.product "Product",x.current_qty "Current_Qty",x.in_stock "In_Stock",x.out_stock "Out_Stock",x.closing_qty "Closing_Qty",x.unit_snapshot "Unit",x.threshold_snapshot "Threshold_Limit",case when d.is_closed then 'Y' else '' end "Is_Closed" from schyler_kitchen.inventory_day_items x join schyler_kitchen.inventory_days d on d.id=x.inventory_day_id join schyler_kitchen.inventory_items i on i.id=x.inventory_item_id where ($1::date is null or d.business_date=$1::date) order by d.business_date,x.inventory_item_id`, [filter.date || null]);
       break;
     case 'Sales_Finance':
-      result = await dbClient().query(`select raw_row from schyler_kitchen.sales_ledgers where ($1::date is null or business_date >= $1::date) and ($2::date is null or business_date <= $2::date) order by business_date`, [filter.from || filter.date || null, filter.to || filter.date || null]);
+      result = await dbClient().query(`select raw_row || jsonb_build_object('Revision',revision) raw_row from schyler_kitchen.sales_ledgers where ($1::date is null or business_date >= $1::date) and ($2::date is null or business_date <= $2::date) order by business_date`, [filter.from || filter.date || null, filter.to || filter.date || null]);
       result.rows = result.rows.map((row) => row.raw_row);
       break;
     case 'Needs_Replenish':
@@ -258,13 +258,14 @@ export async function getSalesBootstrapData(date) {
   const result = await dbClient().query(`select
     (select value from schyler_kitchen.app_config where key='sales_config') config,
     coalesce((select jsonb_agg(jsonb_build_object('Category',category,'Name',name,'Price',price,'Active',case when active then 'Y' else 'N' end) order by id) from schyler_kitchen.product_catalog),'[]'::jsonb) products,
-    (select raw_row from schyler_kitchen.sales_ledgers where business_date=$1::date) row`, [date]);
+    (select raw_row || jsonb_build_object('Revision',revision) from schyler_kitchen.sales_ledgers where business_date=$1::date) row,
+    (select count(*)::int from schyler_kitchen.pos_orders where business_date=$1::date and deleted_at is null) order_count`, [date]);
   const data = result.rows[0] || {};
   let config = data.config;
   if (typeof config === 'string') {
     try { config = JSON.parse(config); } catch { config = null; }
   }
-  return { config, products: data.products || [], row: data.row || null };
+  return { config, products: data.products || [], row: data.row || null, orderCount: data.order_count || 0 };
 }
 
 export async function getAutoAttendanceWeek(weekStart, weekEnd) {
@@ -331,10 +332,11 @@ export async function listFaceAttendanceWeek(weekStart, weekEnd) {
 }
 
 export async function upsertSalesDay(date, row) {
-  await dbClient().query(`insert into schyler_kitchen.sales_ledgers(business_date,raw_row,takoyaki_sales,expenses_total,total_cash_calculated,previous_cash_added,final_total_cash,remaining_balance)
+  const result = await dbClient().query(`insert into schyler_kitchen.sales_ledgers(business_date,raw_row,takoyaki_sales,expenses_total,total_cash_calculated,previous_cash_added,final_total_cash,remaining_balance)
     values($1::date,$2::jsonb,$3,$4,$5,$6,$7,$8)
-    on conflict(business_date) do update set raw_row=excluded.raw_row,takoyaki_sales=excluded.takoyaki_sales,expenses_total=excluded.expenses_total,total_cash_calculated=excluded.total_cash_calculated,previous_cash_added=excluded.previous_cash_added,final_total_cash=excluded.final_total_cash,remaining_balance=excluded.remaining_balance`,
+    on conflict(business_date) do update set raw_row=excluded.raw_row,takoyaki_sales=excluded.takoyaki_sales,expenses_total=excluded.expenses_total,total_cash_calculated=excluded.total_cash_calculated,previous_cash_added=excluded.previous_cash_added,final_total_cash=excluded.final_total_cash,remaining_balance=excluded.remaining_balance,revision=schyler_kitchen.sales_ledgers.revision+1 returning revision`,
   [date, JSON.stringify(row), row.Takoyaki_Sales, row.Expenses_Total, row.Total_Cash_Calculated, row.Previous_Cash_Added, row.Final_Total_Cash, row.Remaining_Balance]);
+  return Number(result.rows[0].revision);
 }
 
 export async function deleteSalesDay(date) {

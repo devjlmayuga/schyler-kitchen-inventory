@@ -1,3 +1,4 @@
+import { posBootstrap, posComplete, posOrdersList, posOrderGet, posEdit, posDelete } from './posServices.js';
 import {
   authAdminUpsertUser,
   authLogin,
@@ -134,6 +135,32 @@ async function dispatchActionInternal({ action, token, session, payload }) {
       const date = String(payload?.date || '');
       const closed = payload?.closed;
       return await inventorySetClosed({ date, closed });
+    }
+
+    // POS: completed orders and their ledger update share the request transaction.
+    case 'pos.bootstrap': {
+      await requireAuth({ token, session });
+      return posBootstrap({ date: String(payload?.date || '') });
+    }
+    case 'pos.orders': {
+      await requireAuth({ token, session });
+      return posOrdersList({ date: String(payload?.date || ''), before: payload?.before });
+    }
+    case 'pos.complete': {
+      const user = await requireAuth({ token, session });
+      return posComplete(payload, user.username);
+    }
+    case 'pos.order': {
+      await requireAuth({ token, session });
+      return posOrderGet({ id: payload?.id });
+    }
+    case 'pos.edit': {
+      const user = await requireAuth({ token, session });
+      return posEdit(payload, user.username);
+    }
+    case 'pos.delete': {
+      const user = await requireAuth({ token, session });
+      return posDelete(payload, user.username);
     }
 
     // Sales / Finance

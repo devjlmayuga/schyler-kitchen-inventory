@@ -1,6 +1,6 @@
 # Schyler's Kitchen Inventory
 
-Next.js inventory, sales, replenishment, administration, authentication, and weekly attendance application backed exclusively by Neon PostgreSQL.
+Next.js POS, inventory, sales, replenishment, administration, authentication, and weekly attendance application backed exclusively by Neon PostgreSQL.
 
 ## Local setup
 
@@ -38,13 +38,31 @@ All application tables live under the `schyler_kitchen` schema. Runtime code rea
 - Standalone Neon SQL import: `db/import-takoyaki-data.sql`
 - Setup and mapping guide: `docs/neon-database.md`
 
-## Inventory and order entry
+## Inventory and POS
 
 Inventory loads automatically when the date changes. Search or filter for low stock, enter stock added and used, then select **Save inventory**. Copy, closed-day, and delete actions are in the actions menu. A closed day means the shop did not operate; it is not an end-of-shift action.
 
-In Sales, choose products from **New order**, adjust quantities in the basket, and select **Record sale**. A successful save adds the sale to the selected day's totals and clears the basket. **Daily summary** contains expenses, staff payouts, cash carried over, and corrections. Sales history and export are in the actions menu.
+In **POS**, tap menu items, adjust quantities, and choose Takeaway, Dine-in, or Delivery. **Add a custom-priced item** accepts variable-price items such as “Barkada mix” at ₱230. Customer/table and order notes are optional. Enter cash received to calculate change, or leave it blank for exact payment. **Complete & print** saves the order, adds it to Sales, clears the basket, and opens the order slip. Disable automatic printing in **Printer setup** to use **Complete sale** instead.
 
-Sales still use the daily ledger: individual order records, receipts, payments, and automatic stock deductions are future POS work. New sales preserve previously recorded revenue and historical product quantities, including products removed from the active menu.
+Orders use the current date in Asia/Manila. Each order and its daily sales update commit together. If a checkout is interrupted, **Retry save** uses the same order reference so it is counted once. Pending checkouts survive a reload in the same tab. An internet connection is required to complete an order. **Saved orders** lets staff review and reprint previous slips, retaining the names and prices sold even after menu changes. Printing failures never create another sale.
+
+**Sales** contains daily totals, expenses, staff payouts, cash carried over, and history/export. New POS orders preserve earlier revenue and historical product quantities. If another terminal updates Sales while an expense edit is open, reload the latest totals before saving.
+
+To fix a mistake, choose **Sales → Edit sales / orders**, open the order, then **Edit sale**. You can also open it from **POS → Saved orders**. Correct products, quantities, unit prices, custom items, cash received, customer/table, and notes, then **Save correction**. The same order number is retained and its original day's sales, product counts, and cash balance update together. Catalog prices and other orders/expenses are preserved. Corrected slips show their revision and can be reprinted. Each correction keeps its previous and new values, operator, time, and optional note in the database. Interrupted saves can be retried without duplicating the correction; concurrent edits require reloading the latest order.
+
+Historical days without POS orders still support **Adjust recorded sales** for daily totals and quantities. Days containing POS orders use individual order corrections so receipts and totals stay consistent; those days cannot be deleted. Full order voids/refunds, electronic payment processing, and automatic stock deductions are not implemented in this version.
+
+## Order slip printing
+
+**Printer setup** is saved on each device and offers 58 mm or 80 mm paper:
+
+- **Device print dialog** is the default web workflow on Android, iPhone/iPad, Windows, and Mac. Select a printer exposed by the operating system, or save as PDF. A connected Bluetooth printer needs a compatible manufacturer print service/driver; pairing alone does not guarantee it will appear. Use the matching paper size, no browser headers/footers, and 100% scale where available.
+- **Bluetooth Classic / USB serial** uses Web Serial in compatible desktop browsers with an ESC/POS printer. Pair Bluetooth Classic printers in the operating system first, select the printer in the browser chooser, and use its documented baud rate.
+- **Bluetooth Low Energy** uses Web Bluetooth in compatible browsers with an ESC/POS BLE printer. Enter the manufacturer's service and writable characteristic UUIDs, then **Connect printer**. Bluetooth Classic-only printers cannot use this method.
+
+Direct connection requires HTTPS (localhost also works) and browser permission; reconnect after reloading when needed. Unsupported direct methods are disabled. Direct slips use plain ASCII text and `PHP`; use the device print dialog for non-Latin names. Enable cutting only for printers with a cutter. A successful send confirms delivery to the connection, not physical paper output; check the printer before reprinting a partially printed slip. Printing or cancelling the print dialog does not affect the saved sale.
+
+Browser support references: [Chrome Web Bluetooth](https://developer.chrome.com/docs/capabilities/bluetooth), [Bluetooth Classic over Web Serial](https://developer.chrome.com/blog/serial-over-bluetooth). Direct output uses [Epson ESC/POS commands](https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/tmt20ivl.html). Physical printer compatibility must be checked with the printer model in use.
 
 ## Needs and administration
 
@@ -64,9 +82,9 @@ Select **Payslip** for an individual staff member to preview and print the selec
 
 Inventory and menu names can be edited in their Admin lists. Inventory renames keep the same item and its stock history; previously recorded sales retain their original menu names. Duplicate names are rejected.
 
-In **Sales → New order**, use **Custom sale** for variable-price items such as “Barkada mix” at ₱230, then record the order. In **Daily summary**, **Other expense** accepts a description and amount, such as “Delivery fee” at ₱80. Both are retained in the daily ledger; custom sales increase sales and custom expenses reduce cash balance and appear in expense reports.
+In **POS**, use **Add a custom-priced item** for variable-price items. In **Sales**, **Other expense** accepts a description and amount, such as “Delivery fee” at ₱80. Both are retained in the daily ledger; custom sales increase sales and custom expenses reduce cash balance and appear in expense reports.
 
-Existing installations need `npm run db:migrate` before running this version. Schema version 3 adds overtime hours and saved pay-rate details to attendance without removing existing records.
+Existing installations need `npm run db:migrate` before running this version. Schema version 3 adds overtime hours and saved pay-rate details to attendance. Version 4 adds saved POS orders and sales revision checks. Version 5 adds order revisions and correction history. Existing records are preserved.
 
 ## Verification
 
@@ -75,4 +93,4 @@ npm test
 npm run build
 ```
 
-Payroll calculations and custom ledger amounts have unit tests. `test/payroll-postgres.test.js` additionally verifies persistence, inventory history after renaming, manual attendance overrides, and staff access restrictions when `TEST_DATABASE_URL` is supplied. Its test records are enclosed in a transaction that always rolls back.
+Unit tests cover payroll, custom amounts, POS pricing/validation, order corrections, ledger preservation, thermal slip formatting, and Bluetooth write sequencing. With `TEST_DATABASE_URL` supplied, `test/payroll-postgres.test.js` verifies payroll persistence, inventory history after renaming, manual attendance overrides, and staff access restrictions. `test/pos-postgres.test.js` verifies order persistence, correction history, retry deduplication, historical prices, conflicting edits, expense preservation, and order pagination. Both integration suites enclose their records in transactions that always roll back.

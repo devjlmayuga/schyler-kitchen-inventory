@@ -63,6 +63,39 @@ CREATE TABLE IF NOT EXISTS sales_ledgers (
   remaining_balance numeric(18,2) NOT NULL DEFAULT 0
 );
 
+ALTER TABLE sales_ledgers ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS pos_orders (
+  id uuid PRIMARY KEY,
+  order_number bigint GENERATED ALWAYS AS IDENTITY UNIQUE,
+  business_date date NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by text NOT NULL,
+  request_hash text NOT NULL,
+  details jsonb NOT NULL,
+  total numeric(18,2) NOT NULL CHECK (total >= 0)
+);
+CREATE INDEX IF NOT EXISTS pos_orders_date_number_idx ON pos_orders(business_date, order_number DESC);
+
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 1;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS updated_at timestamptz;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS updated_by text;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS deleted_by text;
+ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS deletion_reason text NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS pos_order_edits (
+  id uuid PRIMARY KEY,
+  order_id uuid NOT NULL REFERENCES pos_orders(id),
+  request_hash text NOT NULL,
+  revision bigint NOT NULL,
+  before_details jsonb NOT NULL,
+  after_details jsonb NOT NULL,
+  reason text NOT NULL DEFAULT '',
+  created_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(order_id, revision)
+);
+
 CREATE TABLE IF NOT EXISTS replenishment_needs (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   business_date date NOT NULL,
@@ -146,5 +179,5 @@ CREATE TABLE IF NOT EXISTS application_write_log (
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO schema_versions(version) VALUES (1),(2),(3) ON CONFLICT DO NOTHING;
+INSERT INTO schema_versions(version) VALUES (1),(2),(3),(4),(5),(6) ON CONFLICT DO NOTHING;
 COMMIT;

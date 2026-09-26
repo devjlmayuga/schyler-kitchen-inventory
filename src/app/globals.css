@@ -346,3 +346,23 @@
   .payslip-table { min-width: 0; }
   .payslip-sheet .overflow-x-auto { overflow: visible; }
 }
+
+.pos-dialog {
+  width: min(620px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: auto; padding: 0; overflow: hidden;
+  border: 1px solid #e2e8f0; border-radius: 16px;
+  color: #0f172a; background: white; box-shadow: 0 24px 80px #0f172a33;
+}
+.pos-dialog[open] { display: flex; flex-direction: column; }
+.pos-dialog::backdrop { background: #0f172a80; }
+.pos-dialog button:focus-visible { outline: 2px solid var(--p-2); outline-offset: 2px; }
+.order-slip-paper { max-width: 100%; padding: 4mm; margin: 0 auto; color: black; background: white; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media print {
+  body:has(#order-slip-print-root) { background: white !important; }
+  body:has(#order-slip-print-root) > :not(#order-slip-print-root) { display: none !important; }
+  #order-slip-print-root, #order-slip-print-root .pos-dialog, #order-slip-print-root .pos-modal-body { position: static !important; width: 100% !important; max-width: none !important; height: auto !important; max-height: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; overflow: visible !important; box-shadow: none !important; }
+  #order-slip-print-root .pos-modal-controls, #order-slip-print-root .pos-dialog::backdrop { display: none !important; }
+  #order-slip-print-root .order-slip-preview { padding: 0 !important; background: white !important; }
+  #order-slip-print-root .order-slip-paper { max-width: none; margin: 0; break-inside: avoid; }
+}

@@ -1,3 +1,5 @@
+import { lockSalesDay, hasPosOrders } from './postgres/posRepository.js';
+import { orderError } from '../../lib/pos.js';
 import { normalizePayroll, normalizeAttendance } from '../../lib/payroll.js';
 import { normalizeCatalog } from '../../lib/admin.js';
 import { readCustomEntries } from '../../lib/sales.js';
@@ -731,12 +733,25 @@ export async function salesFinanceGetByDate({ date }) {
 
 export async function salesFinanceDeleteByDate({ date }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
+  await lockSalesDay(date);
+  if (await hasPosOrders(date)) throw orderError('This day contains POS orders and cannot be deleted.');
   return deleteSalesDay(date);
 }
 
-export async function salesFinanceUpsertByDate({ date, row }) {
+export async function salesFinanceUpsertByDate({ date, row, fromPos = false }) {
   if (!isIsoDate(date)) throw new Error('payload.date must be YYYY-MM-DD');
   if (!row) throw new Error('payload.row is required');
+  await lockSalesDay(date);
+  const { row: current } = await salesFinanceGetByDate({ date });
+  const hasOrders = await hasPosOrders(date);
+  if (!fromPos) {
+    if ((row.Revision != null && Number(row.Revision) !== Number(current?.Revision || 0)) || (hasOrders && row.Revision == null))
+      throw orderError('Sales changed on another screen. Reload this day before saving your expenses.', 'SALES_CONFLICT');
+    if (hasOrders && (toNumber(row.Takoyaki_Sales) !== toNumber(current?.Takoyaki_Sales) ||
+      String(row.Product_Sales_JSON || '') !== String(current?.Product_Sales_JSON || '') ||
+      String(row.Custom_Sales_JSON || '') !== String(current?.Custom_Sales_JSON || '')))
+      throw orderError('This day contains saved POS orders. Use Edit sale to correct an order; daily sales details cannot be overwritten.');
+  }
 
   const cfgRes = await salesConfigGet();
   const cfg = cfgRes?.config || defaultSalesConfig();
@@ -785,8 +800,8 @@ export async function salesFinanceUpsertByDate({ date, row }) {
   if (row.Product_Sales_JSON != null) normalized.Product_Sales_JSON = String(row.Product_Sales_JSON || '');
   normalized.Product_Sales_Total = takoyakiSales;
 
-  await upsertSalesDay(date, normalized);
-  return { date };
+  const revision = await upsertSalesDay(date, normalized);
+  return { date, revision };
 }
 
 export async function salesFinanceList({ from, to }) {
@@ -815,6 +830,7 @@ export async function salesBootstrap({ date }) {
   return {
     date,
     config,
+    orderCount: data.orderCount,
     products: data.products.map((row) => ({ ...row, Price: toNumber(row.Price) })),
     row: data.row ? normalizeSalesRow(data.row) : null,
   };

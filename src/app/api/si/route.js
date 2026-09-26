@@ -30,7 +30,7 @@ function jsonOk(data) {
 }
 
 function jsonError(code, message) {
-  const status = code === 'SERVER_ERROR' ? 500 : code === 'NOT_FOUND' ? 404 : code === 'UNAUTHENTICATED' ? 401 : 400;
+  const status = code === 'SERVER_ERROR' ? 500 : code === 'SALES_CONFLICT' || code === 'ORDER_CONFLICT' ? 409 : code === 'NOT_FOUND' ? 404 : code === 'UNAUTHENTICATED' ? 401 : 400;
   return NextResponse.json({ ok: false, error: { code: String(code || 'UNKNOWN'), message: String(message || '') } }, { status });
 }
 
@@ -50,7 +50,7 @@ export async function GET(request) {
     return jsonOk(data);
   } catch (err) {
     const msg = safeMessage(err);
-    return jsonError(inferErrorCode(msg), msg);
+    return jsonError(['ORDER_VALIDATION', 'ORDER_CONFLICT', 'SALES_CONFLICT'].includes(err?.code) ? err.code : inferErrorCode(msg), msg);
   }
 }
 
@@ -67,6 +67,6 @@ export async function POST(request) {
     return jsonOk(data);
   } catch (err) {
     const msg = safeMessage(err);
-    return jsonError(inferErrorCode(msg), msg);
+    return jsonError(['ORDER_VALIDATION', 'ORDER_CONFLICT', 'SALES_CONFLICT'].includes(err?.code) ? err.code : inferErrorCode(msg), msg);
   }
 }

@@ -12,6 +12,7 @@ export default function CustomAmountEntries({
   onError,
   disabled,
   example,
+  maxLength = 200,
 }) {
   function add() {
     try {
@@ -50,7 +51,7 @@ export default function CustomAmountEntries({
           <input
             className="md-input"
             aria-label={`${title} description`}
-            maxLength={200}
+            maxLength={maxLength}
             placeholder={example}
             value={draft.description}
             onChange={(event) => onDraftChange({ ...draft, description: event.target.value })}

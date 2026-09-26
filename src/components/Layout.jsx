@@ -11,6 +11,7 @@ import {
   Menu,
   Package,
   Settings,
+  ShoppingBag,
   X,
 } from 'lucide-react';
 import { clearSession, getSessionToken, getUser, isLoggedIn, setLocked } from '../lib/auth.js';
@@ -20,6 +21,7 @@ import { parseQty } from '../lib/numbers.js';
 
 const routes = [
   { path: '/inventory', label: 'Inventory' },
+  { path: '/pos', label: 'POS' },
   { path: '/sales', label: 'Sales' },
   { path: '/needs', label: 'Needs!' },
   { path: '/admin', label: 'Admin' },
@@ -28,6 +30,7 @@ const routes = [
 const iconByPath = {
   '/inventory': Package,
   '/sales': ClipboardList,
+  '/pos': ShoppingBag,
   '/needs': LayoutDashboard,
   '/admin': Settings,
 };
