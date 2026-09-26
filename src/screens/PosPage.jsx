@@ -36,6 +36,7 @@ import CustomAmountEntries from '../components/CustomAmountEntries.jsx';
 import PrinterSetup from '../components/pos/PrinterSetup.jsx';
 import OrderSlip from '../components/pos/OrderSlip.jsx';
 import EditOrder from '../components/pos/EditOrder.jsx';
+import DeleteOrder from '../components/pos/DeleteOrder.jsx';
 
 const pendingKey = () => `si_pos_pending:${getUser()?.username || 'staff'}`;
 
@@ -67,6 +68,7 @@ export default function PosPage() {
   const [lastOrder, setLastOrder] = useState(null);
   const [slip, setSlip] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [settings, setSettings] = useState(DEFAULT_PRINTER);
   const [printer, setPrinter] = useState({ connected: false });
   const [showPrinter, setShowPrinter] = useState(false);
@@ -421,30 +423,51 @@ export default function PosPage() {
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {orders.map((order) => (
-                      <li key={order.id}>
-                        <button
-                          className="flex w-full flex-wrap items-center justify-between gap-3 p-5 text-left hover:bg-slate-50"
-                          onClick={() => setSlip({ order })}
-                        >
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-800">
-                              {orderNumber(order.number)}{' '}
-                              <span className="ml-2 text-xs font-normal text-slate-500">{order.type}</span>
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {receiptTime(order.createdAt)}
-                              {order.customer ? ` · ${order.customer}` : ''}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {order.items.reduce((sum, item) => sum + item.quantity, 0)} items ·{' '}
-                              {order.cashier}
-                            </p>
+                      <li key={order.id} className="hover:bg-slate-50">
+                        <div className="flex w-full flex-wrap items-center justify-between gap-3 p-5">
+                          <button
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => setSlip({ order })}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800">
+                                {orderNumber(order.number)}{' '}
+                                <span className="ml-2 text-xs font-normal text-slate-500">{order.type}</span>
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {receiptTime(order.createdAt)}
+                                {order.customer ? ` · ${order.customer}` : ''}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {order.items.reduce((sum, item) => sum + item.quantity, 0)} items ·{' '}
+                                {order.cashier}
+                              </p>
+                            </div>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="admin-icon-button"
+                              aria-label={`Print receipt for ${orderNumber(order.number)}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSlip({ order });
+                              }}
+                            >
+                              <Printer size={17} className="text-[var(--p-3)]" />
+                            </button>
+                            <button
+                              className="admin-icon-button text-red-600 hover:bg-red-50"
+                              aria-label={`Delete ${orderNumber(order.number)}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDeleting(order);
+                              }}
+                            >
+                              <Trash2 size={17} />
+                            </button>
                           </div>
-                          <span className="flex items-center gap-3 font-semibold tabular-nums">
-                            {peso(order.total)}
-                            <Printer size={17} className="text-[var(--p-3)]" />
-                          </span>
-                        </button>
+                          <span className="font-semibold tabular-nums">{peso(order.total)}</span>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -801,6 +824,22 @@ export default function PosPage() {
                 }
               : undefined
           }
+        />
+      )}
+      {deleting && (
+        <DeleteOrder
+          order={deleting}
+          onDeleted={(result) => {
+            setDeleting(null);
+            setOrders((items) => items.filter((item) => item.id !== result.order.id));
+            setSales(result.sales);
+            setSummary(result.summary);
+            if (date === result.order.date) {
+              setSales(result.sales);
+              setSummary(result.summary);
+            }
+          }}
+          onClose={() => setDeleting(null)}
         />
       )}
       {editing && (
