@@ -181,7 +181,7 @@ export default function Layout({ children }) {
       {/* Sidebar */}
       <aside
         className={[
-          'fixed left-0 top-0 z-50 flex h-dvh w-[290px] flex-col border-r border-slate-200 bg-white shadow-sm transition-transform lg:translate-x-0 lg:shadow-none',
+          'fixed left-0 top-0 z-50 flex h-dvh w-[240px] flex-col border-r border-slate-200 bg-white shadow-sm transition-transform lg:translate-x-0 lg:shadow-none',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
       >
@@ -228,7 +228,7 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main */}
-      <div className="flex min-h-dvh min-w-0 flex-1 flex-col lg:ml-[290px]">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col lg:ml-[240px]">
         <header className="md-topbar">
           <div className="flex items-center gap-3 px-4 py-3">
             <button
@@ -312,7 +312,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 overflow-x-hidden px-4 pb-8 pt-4">{children}</main>
+        <main className="min-w-0 flex-1 px-4 pb-8 pt-6 sm:px-6 lg:px-8 lg:pt-8">{children}</main>
       </div>
     </div>
   );

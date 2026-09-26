@@ -70,8 +70,8 @@ export default function FaceAttendancePanel({ staff = [], onRecorded }) {
 
   return (
     <div className="md-card p-4">
-      <div className="text-sm font-semibold">Face Attendance (Free Browser Mode)</div>
-      <p className="mt-1 text-xs text-slate-600">Recognition runs in this browser. Neon stores only an encrypted numerical descriptor and check-in events—never camera photos.</p>
+      <div className="section-title">Face attendance</div>
+      <p className="mt-1 text-xs text-slate-500">Enroll staff or record a check-in using the camera. Camera photos are not stored.</p>
       {error ? <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {message ? <div className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</div> : null}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">

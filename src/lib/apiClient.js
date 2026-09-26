@@ -1,7 +1,7 @@
 const API_URL = '/api/si';
 
 const GET_CACHE_TTL_MS = 30_000;
-const GET_CACHEABLE_ACTIONS = new Set(['items.list', 'products.list', 'salesConfig.get', 'inventory.getOrSeed']);
+const GET_CACHEABLE_ACTIONS = new Set(['items.list', 'products.list', 'inventory.getOrSeed']);
 const _inFlight = new Map();
 const _getCache = new Map();
 

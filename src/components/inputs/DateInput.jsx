@@ -1,4 +1,4 @@
-export default function DateInput({ label, value, onChange, min, max }) {
+export default function DateInput({ label, value, onChange, min, max, disabled }) {
   function handleChange(event) {
     let next = event.target.value;
     if (next && min && next < min) next = min;
@@ -9,7 +9,7 @@ export default function DateInput({ label, value, onChange, min, max }) {
   return (
     <label className="md-field">
       {label ? <span className="md-label">{label}</span> : null}
-      <input className="md-input" type="date" value={value} min={min} max={max} onChange={handleChange} />
+      <input className="md-input" type="date" value={value} min={min} max={max} disabled={disabled} onChange={handleChange} />
     </label>
   );
 }

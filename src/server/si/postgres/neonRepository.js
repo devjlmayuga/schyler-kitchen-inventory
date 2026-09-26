@@ -54,21 +54,17 @@ export async function readSheetAsObjects(name, filter = {}) {
 }
 
 export async function replaceAttendanceWeek(weekStart, weekEnd, rows) {
-  const payload = json(rows);
+  await dbClient().query('delete from schyler_kitchen.attendance where business_date between $1::date and $2::date', [weekStart, weekEnd]);
   await dbClient().query(`with source as (
-    select left("Date",10)::date business_date,trim("Staff") staff,upper(trim(coalesce("On_Duty",''))) in ('Y','YES','TRUE','1') duty
-    from jsonb_to_recordset($3::jsonb) x("Date" text,"Staff" text,"On_Duty" text)
-    where trim(coalesce("Staff",''))<>'' and left("Date",10)::date between $1::date and $2::date
-  ), deleted as (
-    delete from schyler_kitchen.attendance where business_date between $1::date and $2::date
+    select "Date"::date business_date,"Staff" staff,"On_Duty"='Y' duty,"Overtime_Hours" overtime_hours,"Pay_Rates" pay_rates
+    from jsonb_to_recordset($1::jsonb) x("Date" text,"Staff" text,"On_Duty" text,"Overtime_Hours" numeric,"Pay_Rates" jsonb)
   ), members as (
     insert into schyler_kitchen.staff_members(display_name)
     select distinct staff from source on conflict(display_name) do update set display_name=excluded.display_name
     returning id,display_name
   )
-  insert into schyler_kitchen.attendance(business_date,staff_id,on_duty)
-  select s.business_date,m.id,s.duty from source s join members m on m.display_name=s.staff
-  on conflict(business_date,staff_id) do update set on_duty=excluded.on_duty`, [weekStart, weekEnd, payload]);
+  insert into schyler_kitchen.attendance(business_date,staff_id,on_duty,overtime_hours,pay_rates)
+  select s.business_date,m.id,s.duty,coalesce(s.overtime_hours,0),s.pay_rates from source s join members m on m.display_name=s.staff`, [json(rows)]);
 }
 
 export async function replaceInventoryDay(date, rows) {
@@ -173,7 +169,31 @@ export async function upsertUser(row) {
   return Boolean(result.rows[0]?.updated);
 }
 
+async function renameCatalogEntries(rows, menu) {
+  const table = menu ? 'product_catalog' : 'inventory_items';
+  const column = menu ? 'name' : 'product';
+  const key = menu ? 'Name' : 'Product';
+  for (const row of rows) {
+    const oldName = row.Original_Name;
+    const name = row[key];
+    if (!oldName || oldName === name) continue;
+    const found = await dbClient().query(`select id from schyler_kitchen.${table} where ${column}=$1 for update`, [oldName]);
+    if (!found.rowCount) throw new Error(`${oldName} has changed or was deleted. Reload the list before saving.`);
+    const conflict = await dbClient().query(`select id from schyler_kitchen.${table} where lower(trim(${column}))=lower(trim($1)) and id<>$2`, [name, found.rows[0].id]);
+    if (conflict.rowCount) throw new Error(`${name} is already in use. Choose a different name.`);
+    await dbClient().query(`update schyler_kitchen.${table} set ${column}=$1 where id=$2`, [name, found.rows[0].id]);
+    if (!menu) {
+      const needsConflict = await dbClient().query(`select 1 from schyler_kitchen.replenishment_needs old join schyler_kitchen.replenishment_needs target
+        on target.business_date=old.business_date and target.status=old.status and target.product=$2
+        where old.product=$1 and old.id<>target.id`, [oldName, name]);
+      if (needsConflict.rowCount) throw new Error(`${name} already appears in Needs. Resolve that entry before renaming.`);
+      await dbClient().query('update schyler_kitchen.replenishment_needs set product=$2 where product=$1', [oldName, name]);
+    }
+  }
+}
+
 export async function upsertInventoryItems(rows) {
+  await renameCatalogEntries(rows, false);
   const result = await dbClient().query(`with source as materialized (
     select trim("Product") product,coalesce("Unit",'') unit,coalesce(nullif(replace("Threshold_Limit",',',''),''),'0')::numeric threshold
     from jsonb_to_recordset($1::jsonb) x("Product" text,"Unit" text,"Threshold_Limit" text) where trim(coalesce("Product",''))<>''
@@ -217,6 +237,7 @@ export async function saveConfig(key, value) {
 }
 
 export async function upsertProducts(rows) {
+  await renameCatalogEntries(rows, true);
   const result = await dbClient().query(`with source as materialized (
     select coalesce("Category",'') category,trim("Name") name,coalesce(nullif(replace("Price",',',''),''),'0')::numeric price,
       upper(trim(coalesce("Active",'Y'))) in ('Y','YES','TRUE','1') active
@@ -249,6 +270,8 @@ export async function getSalesBootstrapData(date) {
 export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   const result = await dbClient().query(`select
     (select value from schyler_kitchen.app_config where key='sales_config') config,
+    coalesce((select jsonb_object_agg(business_date::text,takoyaki_sales) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'{}'::jsonb) sales_by_date,
+    coalesce((select jsonb_agg(jsonb_build_object('date',a.business_date::text,'staff',s.display_name,'onDuty',a.on_duty,'overtimeHours',a.overtime_hours,'rates',a.pay_rates)) from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where a.business_date between $1::date and $2::date),'[]'::jsonb) manual_records,
     coalesce((select jsonb_agg(business_date::text order by business_date) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'[]'::jsonb) open_dates,
     coalesce((select jsonb_agg(jsonb_build_object('date',business_date,'staff',staff) order by business_date,staff) from (
       select distinct (e.event_time at time zone 'Asia/Manila')::date::text business_date,s.display_name staff
@@ -260,7 +283,7 @@ export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   if (typeof config === 'string') {
     try { config = JSON.parse(config); } catch { config = null; }
   }
-  return { config, openDates: data.open_dates || [], faceRecords: data.face_records || [] };
+  return { config, openDates: data.open_dates || [], faceRecords: data.face_records || [], manualRecords: data.manual_records || [], salesByDate: data.sales_by_date || {} };
 }
 
 export async function saveFaceProfile(staff, descriptorCiphertext) {

@@ -1,3 +1,6 @@
+import { normalizePayroll, normalizeAttendance } from '../../lib/payroll.js';
+import { normalizeCatalog } from '../../lib/admin.js';
+import { readCustomEntries } from '../../lib/sales.js';
 import crypto from 'node:crypto';
 import {
   ensureHeaders,
@@ -208,6 +211,7 @@ function defaultSalesConfig() {
       { key: 'Payout_Natalie', label: 'Natalie' },
     ],
     staff: [],
+    payroll: normalizePayroll(),
   };
 }
 
@@ -215,6 +219,7 @@ function normalizeSalesConfig(config) {
   const defaults = defaultSalesConfig();
   const value = config && typeof config === 'object' ? config : {};
   return {
+    payroll: normalizePayroll(value.payroll),
     expenseBreakdown: Array.isArray(value.expenseBreakdown) ? value.expenseBreakdown : defaults.expenseBreakdown,
     partners: Array.isArray(value.partners) ? value.partners : defaults.partners,
     staff: Array.isArray(value.staff)
@@ -340,8 +345,9 @@ export async function attendanceListWeek({ weekStart }) {
   const openDates = data.openDates;
   const byStaffDate = new Map(staff.flatMap((name) => openDates.map((date) => [`${name}\n${date}`, { date, staff: name, onDuty: true }])));
   data.faceRecords.forEach(({ date, staff: name }) => byStaffDate.set(`${name}\n${date}`, { date, staff: name, onDuty: true }));
+  data.manualRecords.forEach((record) => byStaffDate.set(`${record.staff}\n${record.date}`, record));
   const records = [...byStaffDate.values()];
-  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales' };
+  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales', salesByDate: data.salesByDate, payroll: normalizeSalesConfig(data.config).payroll };
 }
 
 export async function attendanceSaveWeek({ weekStart, records }) {
@@ -349,15 +355,11 @@ export async function attendanceSaveWeek({ weekStart, records }) {
   if (!Array.isArray(records)) throw new Error('payload.records must be an array');
   const weekEnd = addDaysIso(weekStart, 6);
   await ensureAttendanceSheet();
-  const saved = records
-    .map((r) => ({
-      Date: String(r?.date || ''),
-      Staff: String(r?.staff || '').trim(),
-      On_Duty: r?.onDuty ? 'Y' : 'N',
-    }))
-    .filter((r) => isIsoDate(r.Date) && r.Date >= weekStart && r.Date <= weekEnd && r.Staff);
+  const { config } = await salesConfigGet();
+  const normalized = normalizeAttendance(records, weekStart, config.payroll);
+  const saved = normalized.map((r) => ({ Date: r.date, Staff: r.staff, On_Duty: r.onDuty ? 'Y' : 'N', Overtime_Hours: r.overtimeHours, Pay_Rates: r.rates }));
   await replaceAttendanceWeek(weekStart, weekEnd, saved);
-  return { weekStart, weekEnd, saved: saved.length };
+  return { weekStart, weekEnd, saved: saved.length, records: normalized };
 }
 
 export async function faceProfilesList() {
@@ -430,15 +432,7 @@ export async function itemsUpsert(item) {
 
 export async function itemsUpsertMany(items) {
   if (!Array.isArray(items)) throw new Error('payload.items must be an array');
-  const normalized = items.map((raw) => {
-    const product = String(raw?.Product || '').trim();
-    if (!product) return null;
-    return {
-      Product: product,
-      Unit: raw?.Unit != null ? String(raw.Unit) : '',
-      Threshold_Limit: toNumber(raw?.Threshold_Limit),
-    };
-  }).filter(Boolean);
+  const normalized = normalizeCatalog(items, 'items');
   const { updated, inserted } = await upsertInventoryItems(normalized);
   return { updated, inserted, total: updated + inserted };
 }
@@ -682,16 +676,7 @@ export async function productsUpsert(raw) {
 
 export async function productsUpsertMany(items) {
   if (!Array.isArray(items)) throw new Error('payload.items must be an array');
-  const normalized = items.map((raw) => {
-    const name = String(raw?.Name || '').trim();
-    if (!name) return null;
-    return {
-      Category: String(raw?.Category || '').trim(),
-      Name: name,
-      Price: toNumber(raw?.Price),
-      Active: raw?.Active == null ? 'Y' : String(raw.Active || '').trim() || 'Y',
-    };
-  }).filter(Boolean);
+  const normalized = normalizeCatalog(items, 'products');
   const { upserts, appends } = await upsertProducts(normalized);
   return { upserts, appends, total: upserts + appends };
 }
@@ -723,7 +708,7 @@ async function ensureSalesSheet(extraHeaders = []) {
 function normalizeSalesRow(row) {
   const out = { ...row };
   Object.keys(out).forEach((k) => {
-    if (k === 'Date' || k === 'Staff' || k === 'Staff_Expenses_JSON' || k === 'Product_Sales_JSON' || k === OTHER_EXPENSES_REMARK_KEY) return;
+    if (k === 'Date' || k === 'Staff' || k === 'Staff_Expenses_JSON' || k === 'Product_Sales_JSON' || k === 'Custom_Sales_JSON' || k === 'Custom_Expenses_JSON' || k === OTHER_EXPENSES_REMARK_KEY) return;
     out[k] = toNumber(out[k]);
   });
   if (out.Date != null) out.Date = String(out.Date);
@@ -766,7 +751,10 @@ export async function salesFinanceUpsertByDate({ date, row }) {
   const takoyakiSales = toNumber(row.Takoyaki_Sales);
   const breakdownTotal = breakdownKeys.reduce((sum, k) => sum + toNumber(row[k]), 0);
   const staffExpenses = normalizeStaffExpenses(row.Staff_Expenses_JSON);
-  const expensesTotal = breakdownTotal + staffExpenses.total;
+  const customSales = readCustomEntries(row.Custom_Sales_JSON);
+  const customExpenses = readCustomEntries(row.Custom_Expenses_JSON);
+  const customExpensesTotal = customExpenses.reduce((sum, entry) => sum + Math.round(entry.amount * 100), 0) / 100;
+  const expensesTotal = Math.round((breakdownTotal + staffExpenses.total + customExpensesTotal) * 100) / 100;
   const totalCash = takoyakiSales - expensesTotal;
   const prevCash = toNumber(row.Previous_Cash_Added);
   const finalCash = totalCash + prevCash;
@@ -777,6 +765,8 @@ export async function salesFinanceUpsertByDate({ date, row }) {
   const normalized = {
     Date: `${date}T00:00:00.000Z`,
     Takoyaki_Sales: takoyakiSales,
+    Custom_Sales_JSON: JSON.stringify(customSales),
+    Custom_Expenses_JSON: JSON.stringify(customExpenses),
     Expenses_Total: expensesTotal,
     Total_Cash_Calculated: totalCash,
     Previous_Cash_Added: prevCash,
@@ -820,9 +810,11 @@ export async function salesFinanceList({ from, to }) {
 export async function salesBootstrap({ date }) {
   if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
   const data = await getSalesBootstrapData(date);
+  const config = normalizeSalesConfig(data.config);
+  delete config.payroll;
   return {
     date,
-    config: normalizeSalesConfig(data.config),
+    config,
     products: data.products.map((row) => ({ ...row, Price: toNumber(row.Price) })),
     row: data.row ? normalizeSalesRow(data.row) : null,
   };

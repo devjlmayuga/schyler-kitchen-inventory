@@ -32,10 +32,10 @@ export async function assertSchemaVersion(client = dbClient()) {
   if (schemaVerified) return;
   try {
     const result = await client.query('select max(version)::int version from schyler_kitchen.schema_versions');
-    if (result.rows[0]?.version !== 2) throw new Error('Database schema version is incompatible');
+    if (result.rows[0]?.version !== 3) throw new Error('Database schema version is incompatible. Run npm run db:migrate.');
     schemaVerified = true;
   } catch (error) {
-    if (error.message === 'Database schema version is incompatible') throw error;
+    if (error.message.startsWith('Database schema version is incompatible')) throw error;
     throw new Error('Database schema is unavailable');
   }
 }

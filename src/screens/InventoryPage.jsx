@@ -1,464 +1,357 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ClipboardCopy, LockKeyhole, Package, Search, Trash2, UnlockKeyhole } from 'lucide-react';
 import ErrorBanner from '../components/ErrorBanner.jsx';
-import FullscreenLoading from '../components/FullscreenLoading.jsx';
+import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import DateInput from '../components/inputs/DateInput.jsx';
+import { ActionMenu, EmptyState, SearchField } from '../components/ScreenControls.jsx';
 import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
-import { clampMin, parseQty } from '../lib/numbers.js';
+import { closingQuantity, isLowStock, prepareInventory } from '../lib/inventory.js';
+import useUnsavedChanges from '../lib/useUnsavedChanges.js';
 
-function computeClosing(item) {
-  const current = parseQty(item.Current_Qty);
-  const inStock = parseQty(item.In_Stock);
-  const outStock = parseQty(item.Out_Stock);
-  return current + inStock - outStock;
-}
-
-function needsReplenish(item) {
-  const closing = computeClosing(item);
-  const threshold = parseQty(item.Threshold_Limit);
-  return closing <= threshold;
-}
-
-function buildInventoryExportText(date, items) {
-  const rows = Array.isArray(items) ? items : [];
-  const lines = [];
-  lines.push(`Daily Inventory - ${date}`);
-  lines.push('Closing = QTY + IN - OUT.');
-  lines.push('');
-
-  const lowItems = rows.filter(needsReplenish);
-  if (lowItems.length) {
-    lines.push(`Needs replenish (${lowItems.length}):`);
-    lowItems.forEach((r) => {
-      const closing = computeClosing(r);
-      const unit = r.Unit ? ` ${r.Unit}` : '';
-      lines.push(`- ${String(r.Product || '').trim()}: ${closing}${unit} remaining`);
-    });
-    lines.push('');
-  }
-
-  lines.push('All items:');
-  rows.forEach((r) => {
-    const product = String(r.Product || '').trim();
-    const unit = r.Unit ? ` ${r.Unit}` : '';
-    const current = parseQty(r.Current_Qty);
-    const inStock = parseQty(r.In_Stock);
-    const outStock = parseQty(r.Out_Stock);
-    const closing = current + inStock - outStock;
-    const low = closing <= parseQty(r.Threshold_Limit);
-    lines.push(
-      `- ${product}: Closing ${closing}${unit} (QTY ${current}, IN ${inStock}, OUT ${outStock})${low ? ' [LOW]' : ''}`,
-    );
-  });
-
-  return lines.join('\n').trim();
-}
-
-export default function InventoryPage({ q: qProp } = {}) {
+export default function InventoryPage({ q: qProp, initialDate } = {}) {
   const [rows, setRows] = useState([]);
-  const [date, setDate] = useState(isoDateToday());
+  const [savedRows, setSavedRows] = useState('[]');
+  const [date, setDate] = useState(initialDate || isoDateToday());
   const [dayClosed, setDayClosed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const router = useRouter();
-  const pathname = usePathname();
-  const q = String(qProp || '').trim();
+  const [query, setQuery] = useState(String(qProp || ''));
+  const [filter, setFilter] = useState('all');
+  const request = useRef(0);
+  const dirty = ready && JSON.stringify(rows) !== savedRows;
+  const canDiscard = useUnsavedChanges(dirty);
+  const busy = loading || saving;
 
-  const load = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!silent) {
-        setSuccess('');
-        setError('');
-      }
-      setLoading(true);
-      setDayClosed(false);
-      try {
-        const data = await apiGet('inventory.getOrSeed', { date });
-        const items = Array.isArray(data.items) ? data.items : [];
-        setRows(items);
-        setDayClosed(!!data?.closed);
-        if (!silent && data?.seeded) {
-          const from = data.seededFrom ? ` from ${data.seededFrom} closing` : '';
-          setSuccess(`Loaded items template (QTY${from}). Enter IN/OUT then submit.`);
-        }
-      } catch (e) {
-        if (!silent) setError(e?.message || 'Failed to load inventory');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [date],
-  );
+  useEffect(() => {
+    setQuery(String(qProp || ''));
+  }, [qProp]);
+
+  const load = useCallback(async () => {
+    const id = ++request.current;
+    setLoading(true);
+    setReady(false);
+    setError('');
+    try {
+      const data = await apiGet('inventory.getOrSeed', { date });
+      if (id !== request.current) return;
+      const items = Array.isArray(data.items) ? data.items : [];
+      setRows(items);
+      setSavedRows(JSON.stringify(items));
+      setDayClosed(!!data.closed);
+      setReady(true);
+    } catch (e) {
+      if (id === request.current) setError(e?.message || 'Unable to load inventory. Please try again.');
+    } finally {
+      if (id === request.current) setLoading(false);
+    }
+  }, [date]);
 
   useEffect(() => {
     load();
+    return () => {
+      request.current += 1;
+    };
   }, [load]);
 
-  const lowCount = useMemo(() => rows.filter(needsReplenish).length, [rows]);
-  const visibleRows = useMemo(() => {
-    const query = q.toLowerCase();
-    const withIndex = rows.map((r, idx) => ({ r, idx }));
-    if (!query) return withIndex;
-    return withIndex.filter(({ r }) => String(r.Product || '').toLowerCase().includes(query));
-  }, [q, rows]);
-  const overlay = saving
-    ? { title: 'Saving inventory…', subtitle: `Date: ${date}` }
-    : seeding
-      ? { title: 'Loading items…', subtitle: 'Preparing daily list' }
-      : loading
-        ? { title: 'Loading inventory…', subtitle: `Date: ${date}` }
-        : null;
+  const lowCount = rows.filter(isLowStock).length;
+  const visibleRows = useMemo(
+    () =>
+      rows
+        .map((item, index) => ({ item, index }))
+        .filter(
+          ({ item }) =>
+            String(item.Product || '')
+              .toLowerCase()
+              .includes(query.trim().toLowerCase()) &&
+            (filter !== 'low' || isLowStock(item)),
+        ),
+    [rows, query, filter],
+  );
+
+  function changeDate(value) {
+    if (!value || value === date || !canDiscard()) return;
+    setSuccess('');
+    setDate(value);
+  }
 
   function updateCell(index, key, value) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [key]: value };
-      return next;
-    });
+    setSuccess('');
+    setRows((previous) => previous.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
   }
 
-  async function submitInventory(nextRows) {
+  async function save() {
+    if (busy || !ready || dayClosed) return;
     setError('');
     setSuccess('');
     setSaving(true);
     try {
-      if (dayClosed) {
-        setError('This day is marked CLOSED. Re-open it to edit inventory.');
-        return;
-      }
-      const payloadRows = (nextRows || rows).map((r) => {
-        const closing = computeClosing(r);
-        return {
-          ...r,
-          Current_Qty: clampMin(parseQty(r.Current_Qty), 0),
-          In_Stock: clampMin(parseQty(r.In_Stock), 0),
-          Out_Stock: clampMin(parseQty(r.Out_Stock), 0),
-          Closing_Qty: closing,
-          Threshold_Limit: clampMin(parseQty(r.Threshold_Limit), 0),
-        };
-      });
-      await apiPost('inventory.submit', { date, items: payloadRows });
-      setSuccess(`Saved inventory for ${date}.`);
-      setRows(payloadRows);
+      const items = prepareInventory(rows);
+      await apiPost('inventory.submit', { date, items });
+      setRows(items);
+      setSavedRows(JSON.stringify(items));
+      setSuccess('Inventory saved.');
     } catch (e) {
-      setError(e?.message || 'Failed to save inventory');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function loadItemsTemplate() {
-    setError('');
-    setSuccess('');
-    setSeeding(true);
-    try {
-      if (dayClosed) {
-        setError('This day is marked CLOSED. Re-open it to load items.');
-        return;
-      }
-      const seeded = await apiGet('inventory.seedTemplate', { date });
-      const templateRows = Array.isArray(seeded.items) ? seeded.items : [];
-      setRows(templateRows);
-      setDayClosed(false);
-      const from = seeded.seededFrom ? ` from ${seeded.seededFrom} closing` : '';
-      setSuccess(`Loaded items template (QTY${from}). Enter IN/OUT then submit.`);
-    } catch (e) {
-      setError(e?.message || 'Failed to load items');
-    } finally {
-      setSeeding(false);
-    }
-  }
-
-  async function deleteDay() {
-    const ok = window.confirm(`Delete inventory records for ${date}? This cannot be undone.`);
-    if (!ok) return;
-    setSaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      await apiPost('inventory.deleteDay', { date });
-      setSuccess(`Deleted inventory for ${date}.`);
-      await load({ silent: true });
-      setDayClosed(false);
-    } catch (e) {
-      setError(e?.message || 'Failed to delete inventory for date');
+      setError(e?.message || 'Unable to save inventory. Your changes are still here.');
     } finally {
       setSaving(false);
     }
   }
 
   async function toggleClosed() {
-    const nextClosed = !dayClosed;
-    if (nextClosed && rows.length) {
-      const ok = window.confirm(
-        `Mark ${date} as CLOSED?\n\nThis will reset IN/OUT to 0 and lock the day. Next open day will inherit QTY from the previous open day.`,
-      );
-      if (!ok) return;
-    }
+    if (!canDiscard()) return;
+    if (
+      !dayClosed &&
+      !window.confirm(
+        `Mark ${date} as a closed day? This resets stock added and used to zero and locks this date. Use this only for a day the shop did not operate.`,
+      )
+    )
+      return;
     setSaving(true);
-    setError('');
     setSuccess('');
+    setError('');
     try {
-      const res = await apiPost('inventory.setClosed', { date, closed: nextClosed });
-      if (nextClosed) {
-        const from = res?.seededFrom ? ` (QTY from ${res.seededFrom} closing)` : '';
-        setSuccess(`Marked ${date} as CLOSED${from}.`);
-      } else {
-        setSuccess(`Re-opened ${date}.`);
-      }
-      await load({ silent: true });
+      await apiPost('inventory.setClosed', { date, closed: !dayClosed });
+      await load();
     } catch (e) {
-      setError(e?.message || 'Failed to update CLOSED status');
+      setError(e?.message || 'Unable to update this day.');
     } finally {
       setSaving(false);
     }
   }
 
-  async function rolloverDay() {
-    const ok = window.confirm(
-      'Rollover day will set Current_Qty = Closing_Qty for all items and reset IN/OUT to 0. Continue?',
-    );
-    if (!ok) return;
-    const nextRows = rows.map((r) => {
-      const closing = computeClosing(r);
-      return {
-        ...r,
-        Current_Qty: closing,
-        In_Stock: 0,
-        Out_Stock: 0,
-        Closing_Qty: closing,
-      };
-    });
-    await submitInventory(nextRows);
+  async function deleteDay() {
+    if (
+      !window.confirm(
+        `Delete inventory for ${date}? This cannot be undone. Any unsaved changes will also be discarded.`,
+      )
+    )
+      return;
+    setSaving(true);
+    setSuccess('');
+    setError('');
+    try {
+      await apiPost('inventory.deleteDay', { date });
+      await load();
+      setSuccess('Saved inventory deleted. A fresh daily list is ready.');
+    } catch (e) {
+      setError(e?.message || 'Unable to delete inventory.');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function copyExportText() {
-    setError('');
-    setSuccess('');
-    const text = buildInventoryExportText(date, rows);
+  async function copySummary() {
+    const summary = [
+      `Daily inventory · ${date}`,
+      ...rows.map(
+        (item) =>
+          `${item.Product}: ${closingQuantity(item)} ${item.Unit || ''}${isLowStock(item) ? ' · Low stock' : ''} (Opening ${item.Current_Qty || 0}, Added ${item.In_Stock || 0}, Used ${item.Out_Stock || 0})`,
+      ),
+    ].join('\n');
     try {
-      await navigator.clipboard.writeText(text);
-      setSuccess('Copied inventory summary to clipboard.');
+      await navigator.clipboard.writeText(summary);
+      setSuccess('Inventory summary copied.');
     } catch {
-      setError('Clipboard copy failed. Try manual select/copy.');
+      setError('Unable to copy the summary. Please allow clipboard access and try again.');
     }
   }
 
   return (
-    <div className="space-y-4 overflow-x-hidden">
-      <FullscreenLoading show={!!overlay} title={overlay?.title} subtitle={overlay?.subtitle} />
-      <div className="md-card w-full max-w-full p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold">Daily Inventory</h1>
-              {dayClosed ? (
-                <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-extrabold tracking-wide text-white">
-                  CLOSED
-                </span>
-              ) : null}
-              <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                Needs replenish <span className="md-badge-danger">{lowCount}</span>
+    <div className="workspace-page">
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="page-title">Inventory</h1>
+            {dayClosed && ready && (
+              <span className="md-chip">
+                <LockKeyhole size={12} /> Closed day
               </span>
-            </div>
-            <p className="text-sm text-slate-600">Closing = QTY + IN − OUT.</p>
+            )}
           </div>
-
-          <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-end">
-            <div className="w-full sm:w-[180px]">
-              <DateInput label="Date" value={date} onChange={setDate} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
-              <button
-                type="button"
-                className={[
-                  'md-btn h-[42px] w-full sm:w-auto',
-                  dayClosed ? 'bg-slate-900 text-white hover:bg-slate-800' : 'md-btn-outline',
-                ].join(' ')}
-                onClick={toggleClosed}
-                disabled={saving || loading || seeding}
-                aria-pressed={dayClosed}
-                title="Toggle CLOSED for this date"
-              >
-                CLOSED
-              </button>
-              {q ? (
-                <button
-                  type="button"
-                  className="md-btn md-btn-outline h-[42px] w-full sm:w-auto"
-                  onClick={() => {
-                    router.replace(pathname);
-                  }}
-                  title="Clear filter"
-                >
-                  Filter: {q} ×
-                </button>
-              ) : null}
-
-              <button
-                type="button"
-                className="md-btn md-btn-outline h-[42px] w-full sm:w-auto"
-                onClick={loadItemsTemplate}
-                disabled={saving || loading || seeding || dayClosed}
-              >
-                Load Items
-              </button>
-              {/* <button
-            type="button"
-            onClick={rolloverDay}
-            disabled={saving || loading || rows.length === 0}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
-          >
-            Rollover Day
-          </button> */}
-
-              <button
-                type="button"
-                className="md-btn md-btn-outline h-[42px] w-full sm:w-auto"
-                onClick={deleteDay}
-                disabled={saving || loading || seeding}
-              >
-                Delete Day
-              </button>
-              <button
-                type="button"
-                className="md-btn md-btn-outline h-[42px] w-full sm:w-auto"
-                onClick={copyExportText}
-                disabled={saving || loading || seeding || rows.length === 0}
-              >
-                Copy/Export Text
-              </button>
-              <button
-                type="button"
-                className="md-btn md-btn-primary h-[42px] w-full sm:w-auto"
-                onClick={() => submitInventory()}
-                disabled={saving || loading || rows.length === 0 || dayClosed}
-              >
-                {saving ? 'Saving…' : 'Submit Inventory'}
-              </button>
-            </div>
-          </div>
+          <p className="page-subtitle">A clear view of what’s in your kitchen.</p>
         </div>
-      </div>
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1 sm:w-44">
+            <DateInput label="Inventory date" value={date} onChange={changeDate} disabled={busy} />
+          </div>
+          <ActionMenu disabled={busy || !ready}>
+            <button
+              className="action-menu-item"
+              disabled={busy || !ready || !rows.length}
+              onClick={copySummary}
+            >
+              <ClipboardCopy size={16} /> Copy summary
+            </button>
+            <button className="action-menu-item" disabled={busy || !ready} onClick={toggleClosed}>
+              {dayClosed ? <UnlockKeyhole size={16} /> : <LockKeyhole size={16} />}
+              {dayClosed ? 'Reopen day' : 'Mark as closed day'}
+            </button>
+            <div className="my-1 border-t border-slate-100" />
+            <button className="action-menu-item text-red-700" disabled={busy || !ready} onClick={deleteDay}>
+              <Trash2 size={16} /> Delete day
+            </button>
+          </ActionMenu>
+        </div>
+      </header>
 
-      <ErrorBanner message={error} onRetry={load} />
-      {success ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+      <ErrorBanner message={error} onRetry={!ready && !loading ? load : undefined} />
+      {success && (
+        <div role="status" className="notice-success">
+          <Check size={16} />
           {success}
         </div>
-      ) : null}
-
-      {!loading && rows.length === 0 ? (
-        <div className="md-card p-4 text-sm text-slate-600">
-          {dayClosed ? (
-            <span>This date is marked CLOSED.</span>
-          ) : (
-            <span>
-              No inventory saved for this date yet. Click <span className="font-extrabold">Load Items</span> to start
-              the daily list, then submit.
-            </span>
-          )}
+      )}
+      {dayClosed && ready && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          This is a non-operating day. Reopen it from the actions menu to make changes.
         </div>
-      ) : null}
+      )}
 
-      {/* Table kept in-place (Tailwind) for now */}
-
-      {!loading && rows.length > 0 ? (
-        <div className="md-table-wrap min-w-0 max-w-full overflow-x-auto overflow-y-hidden">
-          <table className="min-w-[720px] w-full text-left text-sm">
-            <thead className="md-table-head">
-              <tr>
-                <th className="sticky left-0 bg-slate-50 px-3 py-2 font-semibold shadow-[6px_0_14px_rgba(15,23,42,0.06)]">
-                  Item
-                </th>
-                <th className="px-3 py-2 font-semibold">QTY</th>
-                <th className="px-3 py-2 font-semibold">IN</th>
-                <th className="px-3 py-2 font-semibold">OUT</th>
-                <th className="px-3 py-2 font-semibold">Closing</th>
-                {/* <th className="px-3 py-2 font-semibold">Threshold</th> */}
-                {/* <th className="px-3 py-2 font-semibold">Status</th> */}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map(({ r, idx }) => {
-                const closing = computeClosing(r);
-                const low = needsReplenish(r);
-                // Sticky "Item" column must be opaque so scrolled cells don't show through.
-                const rowBg = low ? 'bg-[#FCE4E8]' : 'bg-white';
+      <section className="md-card overflow-hidden" aria-label="Daily stock">
+        <div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="segmented-control self-start" aria-label="Filter inventory">
+            <button
+              type="button"
+              className="segment"
+              aria-pressed={filter === 'all'}
+              onClick={() => setFilter('all')}
+            >
+              All items <span className="segment-count">{ready ? rows.length : '—'}</span>
+            </button>
+            <button
+              type="button"
+              className="segment"
+              aria-pressed={filter === 'low'}
+              onClick={() => setFilter('low')}
+            >
+              Low stock <span className="segment-count">{ready ? lowCount : '—'}</span>
+            </button>
+          </div>
+          <div className="w-full sm:w-64">
+            <SearchField value={query} onChange={setQuery} placeholder="Search inventory…" />
+          </div>
+        </div>
+        {loading ? (
+          <div className="p-10">
+            <LoadingSpinner label="Loading inventory…" />
+          </div>
+        ) : !ready ? (
+          <EmptyState icon={Package} title="Inventory couldn’t be loaded">
+            Use Retry above to load this day before making changes.
+          </EmptyState>
+        ) : !rows.length ? (
+          <EmptyState icon={Package} title="No inventory items yet">
+            Add your kitchen items in Admin to start tracking stock.
+          </EmptyState>
+        ) : !visibleRows.length ? (
+          <EmptyState icon={Search} title={query ? 'No matching items' : 'Stock looks good'}>
+            {query ? 'Try another item name or clear your search.' : 'No items are running low for this day.'}
+          </EmptyState>
+        ) : (
+          <div>
+            <div
+              className="inventory-grid hidden border-b border-slate-100 bg-slate-50/80 px-5 py-3 text-xs font-semibold text-slate-500 sm:grid"
+              aria-hidden="true"
+            >
+              <span>Item</span>
+              <span className="text-center">Opening</span>
+              <span className="text-center">Added</span>
+              <span className="text-center">Used</span>
+              <span className="text-right">Remaining</span>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {visibleRows.map(({ item, index }) => {
+                const closing = closingQuantity(item);
+                const low = isLowStock(item);
                 return (
-                  <tr
-                    key={`${r.Product}-${idx}`}
-                    className={rowBg}
+                  <li
+                    key={`${item.Product}-${index}`}
+                    className="inventory-grid grid items-center gap-x-3 gap-y-4 px-4 py-4 sm:px-5"
                   >
-                    <td
-                      className={[
-                        'sticky left-0 px-3 py-2 font-medium',
-                        rowBg,
-                        'shadow-[6px_0_14px_rgba(15,23,42,0.06)]',
-                      ].join(' ')}
-                    >
-                      <div className="max-w-[150px] truncate sm:max-w-none">{r.Product}</div>
-                    </td>
-                    {['Current_Qty', 'In_Stock', 'Out_Stock'].map((k) => (
-                      <td key={k} className="px-3 py-2">
-                        <div className="flex items-center gap-1">
-                          <input
-                            disabled={dayClosed || k === 'Current_Qty'}
-                            inputMode="decimal"
-                            value={r[k] ?? ''}
-                            onChange={(e) => updateCell(idx, k, e.target.value)}
-                            className="w-[50px] sm:w-11 rounded-2xl bg-white/80 px-1.5 py-1 text-sm ring-1 ring-slate-200/60 shadow-[inset_0_2px_10px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-2 focus:ring-[#F3B0B8]"
-                          />
-                          {r.Unit ? (
-                            <span className="whitespace-nowrap text-xs font-semibold text-slate-500">{r.Unit}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 font-semibold">
-                      <div className="flex items-center gap-1">
-                        <span>{closing}</span>
-                        {r.Unit ? <span className="whitespace-nowrap text-xs font-semibold text-slate-500">{r.Unit}</span> : null}
+                    <div className="col-span-2 min-w-0 sm:col-span-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold text-slate-800">{item.Product}</span>
+                        {low && (
+                          <span className="stock-alert">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--p-3)]" />
+                            {closing <= 0 ? 'Out of stock' : 'Low stock'}
+                          </span>
+                        )}
                       </div>
-                    </td>
-                    {/* <td className="px-3 py-2">
-                      <input
-                        disabled
-                        inputMode="decimal"
-                        value={r.Threshold_Limit ?? ''}
-                        className="w-20 sm:w-24 rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-sm text-slate-700"
-                      />
-                    </td> */}
-                    {/* <td className="px-3 py-2">
-                      {low ? (
-                        <span className="md-badge-warn">
-                          Needs Replenish
+                      {item.Unit && <div className="mt-1 text-xs text-slate-500">{item.Unit}</div>}
+                    </div>
+                    <div className="col-start-1 row-start-2 text-center sm:col-auto sm:row-auto">
+                      <span className="mb-1.5 block text-xs text-slate-500 sm:hidden">Opening</span>
+                      <span className="text-sm tabular-nums text-slate-500">{item.Current_Qty || 0}</span>
+                    </div>
+                    {['In_Stock', 'Out_Stock'].map((key) => (
+                      <label key={key} className="row-start-2 block sm:row-auto">
+                        <span className="mb-1.5 block text-center text-xs text-slate-500 sm:sr-only">
+                          {key === 'In_Stock' ? 'Added' : 'Used'}
                         </span>
-                      ) : (
-                        <span className="text-xs text-slate-500">OK</span>
-                      )}
-                    </td> */}
-                  </tr>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          inputMode="decimal"
+                          aria-label={`${item.Product} ${key === 'In_Stock' ? 'added' : 'used'}`}
+                          disabled={busy || dayClosed}
+                          value={item[key] ?? ''}
+                          onFocus={(event) => event.target.select()}
+                          onChange={(event) => updateCell(index, key, event.target.value)}
+                          placeholder="0"
+                          className="stock-input"
+                        />
+                      </label>
+                    ))}
+                    <div className="col-start-3 row-start-1 text-right sm:col-auto sm:row-auto">
+                      <span className="mb-1 block text-xs text-slate-500 sm:hidden">Remaining</span>
+                      <span
+                        aria-label={`${item.Product} remaining`}
+                        className={`text-lg font-semibold tabular-nums ${low ? 'text-[var(--p-4)]' : 'text-slate-900'}`}
+                      >
+                        {closing}
+                      </span>
+                    </div>
+                  </li>
                 );
               })}
-              {visibleRows.length === 0 ? (
-                <tr className="border-t">
-                  <td className="px-3 py-3 text-slate-600" colSpan={8}>
-                    No items match this filter.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {ready && rows.length > 0 && !dayClosed && (
+        <div className="save-bar">
+          <div className="min-w-0 text-sm text-slate-500">
+            {dirty ? (
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--p-3)]" />
+                Unsaved changes
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Check size={16} />
+                {success === 'Inventory saved.' ? 'All changes saved' : 'Ready for your stock update'}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="md-btn md-btn-primary min-h-11 shrink-0"
+            disabled={busy}
+            onClick={save}
+          >
+            {saving ? 'Saving…' : 'Save inventory'}
+          </button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

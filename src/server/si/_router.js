@@ -235,11 +235,14 @@ async function dispatchActionInternal({ action, token, session, payload }) {
 
     // Sales config
     case 'salesConfig.get': {
-      await requireAuth({ token, session });
-      return await salesConfigGet();
+      const ctx = await requireAuth({ token, session });
+      const result = await salesConfigGet();
+      if (ctx.role !== 'admin') delete result.config.payroll;
+      return result;
     }
     case 'salesConfig.save': {
-      await requireAuth({ token, session });
+      const ctx = await requireAuth({ token, session });
+      requireAdmin(ctx);
       const config = payload?.config || null;
       if (!config) throw new Error('payload.config is required');
       await salesConfigSave(config);
