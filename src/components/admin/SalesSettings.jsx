@@ -9,6 +9,9 @@ import { apiGet, apiPost } from '../../lib/apiClient.js';
 import { normalizePayroll, staffRate } from '../../lib/payroll.js';
 import { nextExpenseKey } from '../../lib/admin.js';
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const allWeekdays = () => WEEKDAYS.map((_, index) => index);
+
 export default function SalesSettings({ onDirtyChange, onBusyChange }) {
   const [config, setConfig] = useState({ expenseBreakdown: [], staff: [] });
   const [saved, setSaved] = useState(null);
@@ -42,6 +45,12 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
         payroll: normalizePayroll(data.config?.payroll),
         expenseBreakdown: data.config?.expenseBreakdown || [],
         staff: data.config?.staff || [],
+        staffSchedules: Object.fromEntries(
+          (data.config?.staff || []).map((name) => [
+            name,
+            data.config?.staffSchedules?.[name] || allWeekdays(),
+          ]),
+        ),
       };
       setConfig(value);
       setSaved(value);
@@ -88,7 +97,11 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
       setError('This staff member is already in the list.');
       return;
     }
-    update({ ...config, staff: [...config.staff, name] });
+    update({
+      ...config,
+      staff: [...config.staff, name],
+      staffSchedules: { ...config.staffSchedules, [name]: allWeekdays() },
+    });
     setStaff('');
   }
   async function save() {
@@ -126,7 +139,7 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
       <div>
         <h2 className="section-title">Sales settings</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Manage expense categories, your team and staff pay rates.
+          Manage expense categories, your team, weekly schedules and staff pay rates.
         </p>
       </div>
       {loading ? (
@@ -217,7 +230,7 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
                 <div>
                   <h3 className="section-title">Staff</h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    Daily pay, quota bonus and overtime rates for each person.
+                    Default work days and pay rates for each person.
                   </p>
                 </div>
               </div>
@@ -274,13 +287,58 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
                             type="button"
                             className="admin-icon-button text-slate-400 hover:text-red-700"
                             aria-label={`Remove staff ${name}`}
-                            onClick={() =>
-                              update({ ...config, staff: config.staff.filter((item) => item !== name) })
-                            }
+                            onClick={() => {
+                              const staffSchedules = { ...config.staffSchedules };
+                              delete staffSchedules[name];
+                              update({
+                                ...config,
+                                staff: config.staff.filter((item) => item !== name),
+                                staffSchedules,
+                              });
+                            }}
                           >
                             <Trash2 size={16} />
                           </button>
                         </div>
+                        <fieldset className="mt-4">
+                          <legend className="md-label">Regular weekly schedule</legend>
+                          <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-7">
+                            {WEEKDAYS.map((day, index) => {
+                              const selected = (config.staffSchedules?.[name] || []).includes(index);
+                              return (
+                                <label
+                                  key={day}
+                                  className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-xs font-semibold transition ${
+                                    selected
+                                      ? 'border-[var(--p-3)] bg-[var(--brand-soft)] text-[var(--p-4)]'
+                                      : 'border-slate-200 bg-white text-slate-500'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    aria-label={`${name} scheduled every ${day}`}
+                                    checked={selected}
+                                    onChange={(event) => {
+                                      const current = config.staffSchedules?.[name] || [];
+                                      const schedule = event.target.checked
+                                        ? [...current, index].sort((left, right) => left - right)
+                                        : current.filter((value) => value !== index);
+                                      update({
+                                        ...config,
+                                        staffSchedules: { ...config.staffSchedules, [name]: schedule },
+                                      });
+                                    }}
+                                  />
+                                  {day}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Used as the default Sunday–Saturday plan. You can adjust a specific week in Attendance.
+                          </p>
+                        </fieldset>
                         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                           {[
                             ['dailyRate', 'Daily pay (₱)'],

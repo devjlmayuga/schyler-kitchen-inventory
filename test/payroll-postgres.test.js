@@ -28,6 +28,7 @@ test(
           config: {
             ...config,
             staff: [staff],
+            staffSchedules: { [staff]: [2, 4] },
             payroll: {
               quotaTarget: 4000,
               staffRates: { [staff]: { dailyRate: 400, quotaBonus: 50, otRate: 50 } },
@@ -35,6 +36,7 @@ test(
           },
         });
         assert.equal((await call('salesConfig.get')).config.payroll.staffRates[staff].dailyRate, 400);
+        assert.deepEqual((await call('salesConfig.get')).config.staffSchedules[staff], [2, 4]);
         assert.equal(Object.hasOwn((await call('sales.bootstrap', { date })).config, 'payroll'), false);
         await call('salesFinance.upsertByDate', {
           date,
@@ -60,8 +62,18 @@ test(
         assert.equal(attendance.salesByDate[date], 4230);
         assert.ok(
           attendance.records.some(
-            (record) => record.staff === staff && record.date === date && record.onDuty,
+            (record) => record.staff === staff && record.date === date && record.scheduled && record.onDuty,
           ),
+        );
+        assert.ok(
+          attendance.records.some(
+            (record) =>
+              record.staff === staff &&
+              record.date === '2099-03-12' &&
+              record.scheduled &&
+              !record.onDuty,
+          ),
+          'regular schedule creates a planned day even without a sale',
         );
         const saved = await call('attendance.saveWeek', {
           weekStart,

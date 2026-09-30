@@ -213,6 +213,7 @@ function defaultSalesConfig() {
       { key: 'Payout_Natalie', label: 'Natalie' },
     ],
     staff: [],
+    staffSchedules: {},
     payroll: normalizePayroll(),
   };
 }
@@ -220,13 +221,27 @@ function defaultSalesConfig() {
 function normalizeSalesConfig(config) {
   const defaults = defaultSalesConfig();
   const value = config && typeof config === 'object' ? config : {};
+  const staff = Array.isArray(value.staff)
+    ? value.staff.map((name) => String(name || '').trim()).filter(Boolean)
+    : defaults.staff;
+  const schedules = value.staffSchedules && typeof value.staffSchedules === 'object'
+    ? value.staffSchedules
+    : {};
   return {
     payroll: normalizePayroll(value.payroll),
     expenseBreakdown: Array.isArray(value.expenseBreakdown) ? value.expenseBreakdown : defaults.expenseBreakdown,
     partners: Array.isArray(value.partners) ? value.partners : defaults.partners,
-    staff: Array.isArray(value.staff)
-      ? value.staff.map((name) => String(name || '').trim()).filter(Boolean)
-      : defaults.staff,
+    staff,
+    staffSchedules: Object.fromEntries(
+      staff.map((name) => {
+        const schedule = schedules[name];
+        const days = Array.isArray(schedule)
+          ? [...new Set(schedule.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))]
+              .sort((left, right) => left - right)
+          : [0, 1, 2, 3, 4, 5, 6];
+        return [name, days];
+      }),
+    ),
   };
 }
 
@@ -343,13 +358,30 @@ export async function attendanceListWeek({ weekStart }) {
   if (!isIsoDate(weekStart)) throw new Error('payload.weekStart must be YYYY-MM-DD');
   const weekEnd = addDaysIso(weekStart, 6);
   const data = await getAutoAttendanceWeek(weekStart, weekEnd);
-  const staff = normalizeSalesConfig(data.config).staff;
+  const config = normalizeSalesConfig(data.config);
+  const staff = config.staff;
   const openDates = data.openDates;
-  const byStaffDate = new Map(staff.flatMap((name) => openDates.map((date) => [`${name}\n${date}`, { date, staff: name, scheduled: true, onDuty: true }])));
-  data.faceRecords.forEach(({ date, staff: name }) => byStaffDate.set(`${name}\n${date}`, { date, staff: name, scheduled: false, onDuty: true }));
+  const weekDates = Array.from({ length: 7 }, (_, index) => addDaysIso(weekStart, index));
+  const byStaffDate = new Map(
+    staff.flatMap((name) =>
+      weekDates
+        .filter((date) => config.staffSchedules[name].includes(new Date(`${date}T00:00:00Z`).getUTCDay()))
+        .map((date) => [`${name}\n${date}`, { date, staff: name, scheduled: true, onDuty: false }]),
+    ),
+  );
+  staff.forEach((name) =>
+    openDates.forEach((date) => {
+      const key = `${name}\n${date}`;
+      byStaffDate.set(key, { ...byStaffDate.get(key), date, staff: name, scheduled: !!byStaffDate.get(key)?.scheduled, onDuty: true });
+    }),
+  );
+  data.faceRecords.forEach(({ date, staff: name }) => {
+    const key = `${name}\n${date}`;
+    byStaffDate.set(key, { ...byStaffDate.get(key), date, staff: name, scheduled: !!byStaffDate.get(key)?.scheduled, onDuty: true });
+  });
   data.manualRecords.forEach((record) => byStaffDate.set(`${record.staff}\n${record.date}`, record));
   const records = [...byStaffDate.values()];
-  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales', salesByDate: data.salesByDate, payroll: normalizeSalesConfig(data.config).payroll };
+  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales', salesByDate: data.salesByDate, payroll: config.payroll };
 }
 
 export async function attendanceSaveWeek({ weekStart, records }) {
