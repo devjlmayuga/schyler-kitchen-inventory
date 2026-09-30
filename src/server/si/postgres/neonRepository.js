@@ -45,7 +45,7 @@ export async function readSheetAsObjects(name, filter = {}) {
       result = await dbClient().query(`select category "Category",name "Name",price "Price",case when active then 'Y' else 'N' end "Active" from schyler_kitchen.product_catalog order by id`);
       break;
     case 'Attendance':
-      result = await dbClient().query(`select a.business_date::text "Date",s.display_name "Staff",case when a.on_duty then 'Y' else 'N' end "On_Duty" from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where ($1::date is null or a.business_date >= $1::date) and ($2::date is null or a.business_date <= $2::date) order by a.business_date,s.id`, [filter.from || null, filter.to || null]);
+      result = await dbClient().query(`select a.business_date::text "Date",s.display_name "Staff",case when a.scheduled then 'Y' else 'N' end "Scheduled",case when a.on_duty then 'Y' else 'N' end "On_Duty" from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where ($1::date is null or a.business_date >= $1::date) and ($2::date is null or a.business_date <= $2::date) order by a.business_date,s.id`, [filter.from || null, filter.to || null]);
       break;
     default:
       throw new Error(`Unknown PostgreSQL entity: ${name}`);
@@ -56,15 +56,15 @@ export async function readSheetAsObjects(name, filter = {}) {
 export async function replaceAttendanceWeek(weekStart, weekEnd, rows) {
   await dbClient().query('delete from schyler_kitchen.attendance where business_date between $1::date and $2::date', [weekStart, weekEnd]);
   await dbClient().query(`with source as (
-    select "Date"::date business_date,"Staff" staff,"On_Duty"='Y' duty,"Overtime_Hours" overtime_hours,"Pay_Rates" pay_rates
-    from jsonb_to_recordset($1::jsonb) x("Date" text,"Staff" text,"On_Duty" text,"Overtime_Hours" numeric,"Pay_Rates" jsonb)
+    select "Date"::date business_date,"Staff" staff,"Scheduled"='Y' scheduled,"On_Duty"='Y' duty,"Overtime_Hours" overtime_hours,"Pay_Rates" pay_rates
+    from jsonb_to_recordset($1::jsonb) x("Date" text,"Staff" text,"Scheduled" text,"On_Duty" text,"Overtime_Hours" numeric,"Pay_Rates" jsonb)
   ), members as (
     insert into schyler_kitchen.staff_members(display_name)
     select distinct staff from source on conflict(display_name) do update set display_name=excluded.display_name
     returning id,display_name
   )
-  insert into schyler_kitchen.attendance(business_date,staff_id,on_duty,overtime_hours,pay_rates)
-  select s.business_date,m.id,s.duty,coalesce(s.overtime_hours,0),s.pay_rates from source s join members m on m.display_name=s.staff`, [json(rows)]);
+  insert into schyler_kitchen.attendance(business_date,staff_id,scheduled,on_duty,overtime_hours,pay_rates)
+  select s.business_date,m.id,s.scheduled,s.duty,coalesce(s.overtime_hours,0),s.pay_rates from source s join members m on m.display_name=s.staff`, [json(rows)]);
 }
 
 export async function replaceInventoryDay(date, rows) {
@@ -272,7 +272,7 @@ export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   const result = await dbClient().query(`select
     (select value from schyler_kitchen.app_config where key='sales_config') config,
     coalesce((select jsonb_object_agg(business_date::text,takoyaki_sales) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'{}'::jsonb) sales_by_date,
-    coalesce((select jsonb_agg(jsonb_build_object('date',a.business_date::text,'staff',s.display_name,'onDuty',a.on_duty,'overtimeHours',a.overtime_hours,'rates',a.pay_rates)) from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where a.business_date between $1::date and $2::date),'[]'::jsonb) manual_records,
+    coalesce((select jsonb_agg(jsonb_build_object('date',a.business_date::text,'staff',s.display_name,'scheduled',a.scheduled,'onDuty',a.on_duty,'overtimeHours',a.overtime_hours,'rates',a.pay_rates)) from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where a.business_date between $1::date and $2::date),'[]'::jsonb) manual_records,
     coalesce((select jsonb_agg(business_date::text order by business_date) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'[]'::jsonb) open_dates,
     coalesce((select jsonb_agg(jsonb_build_object('date',business_date,'staff',staff) order by business_date,staff) from (
       select distinct (e.event_time at time zone 'Asia/Manila')::date::text business_date,s.display_name staff

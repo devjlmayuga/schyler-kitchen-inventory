@@ -54,7 +54,10 @@ export async function posDelete(raw, cashier) {
   if (existing.deleted_at)
     return { order: mapOrder(existing), sales: row, summary: await orderSummary(date), repeated: true };
   if (Number(existing.revision) !== request.revision)
-    throw orderError('This sale changed on another screen. Reload and review it before deleting.', 'ORDER_CONFLICT');
+    throw orderError(
+      'This sale changed on another screen. Reload and review it before deleting.',
+      'ORDER_CONFLICT',
+    );
   if (!row) throw orderError('The daily sales record is missing. Reload and review this day.');
   await salesFinanceUpsertByDate({ date, row: removeOrderFromLedger(row, existing.details), fromPos: true });
   const order = await markOrderDeleted({ ...request, cashier });
@@ -68,7 +71,8 @@ export async function posEdit(raw, cashier) {
   await lockOrder(request.id);
   const existing = await findOrder(request.id);
   if (!existing) throw orderError('This order could not be found.');
-  if (existing.deleted_at) throw orderError('This sale was deleted. Close the editor and refresh saved orders.', 'ORDER_CONFLICT');
+  if (existing.deleted_at)
+    throw orderError('This sale was deleted. Close the editor and refresh saved orders.', 'ORDER_CONFLICT');
   if (request.date !== existing.business_date) throw orderError('The original sale date cannot be changed.');
   await lockSalesDay(request.date);
   const recordedEdit = await findOrderEdit(request.editId);
@@ -122,7 +126,8 @@ export async function posComplete(raw, cashier) {
         'This order reference has already been used. Reload POS to review saved orders.',
         'ORDER_CONFLICT',
       );
-    if (existing.deleted_at) throw orderError('This sale was deleted and cannot be restored by retrying checkout.');
+    if (existing.deleted_at)
+      throw orderError('This sale was deleted and cannot be restored by retrying checkout.');
     const { row } = await salesFinanceGetByDate({ date: request.date });
     return {
       order: mapOrder(existing),

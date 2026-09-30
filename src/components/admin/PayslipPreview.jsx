@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X } from 'lucide-react';
+import { Download, Printer, X } from 'lucide-react';
 import { peso } from '../../lib/sales.js';
+import { downloadPayslipPdf, payslipPdfFilename } from '../../lib/payslipPdf.js';
 
 export default function PayslipPreview({ payslip, onClose }) {
   const dialog = useRef(null);
@@ -19,6 +20,15 @@ export default function PayslipPreview({ payslip, onClose }) {
         <div className="payslip-controls flex items-center justify-between gap-3 border-b border-slate-200 p-4">
           <h2 className="section-title">Payslip preview</h2>
           <div className="flex gap-2">
+            <button
+              className="md-btn md-btn-outline"
+              onClick={() => downloadPayslipPdf(payslip)}
+              aria-label={`Download ${staff} payslip as PDF`}
+              title={payslipPdfFilename(payslip)}
+            >
+              <Download size={16} />
+              Download PDF
+            </button>
             <button className="md-btn md-btn-primary" onClick={() => window.print()}>
               <Printer size={16} />
               Print

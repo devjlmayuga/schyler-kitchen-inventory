@@ -65,8 +65,9 @@ test(
         );
         const saved = await call('attendance.saveWeek', {
           weekStart,
-          records: [{ staff, date, onDuty: true, overtimeHours: 1.5 }],
+          records: [{ staff, date, scheduled: true, onDuty: true, overtimeHours: 1.5 }],
         });
+        assert.equal(saved.records[0].scheduled, true);
         assert.equal(saved.records[0].rates.dailyRate, 400);
         let reloaded = await call('attendance.listWeek', { weekStart });
         assert.equal(

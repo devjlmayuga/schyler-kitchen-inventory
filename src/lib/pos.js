@@ -97,7 +97,11 @@ export function normalizeOrderDeletion(raw) {
   if (!validOrderId(raw?.id)) throw orderError('A valid order reference is required.');
   if (!Number.isSafeInteger(Number(raw.revision)) || Number(raw.revision) < 1)
     throw orderError('Reload the saved order before deleting.');
-  return { id: raw.id.toLowerCase(), revision: Number(raw.revision), reason: text(raw.reason, 'Deletion note', 200) };
+  return {
+    id: raw.id.toLowerCase(),
+    revision: Number(raw.revision),
+    reason: text(raw.reason, 'Deletion note', 200),
+  };
 }
 
 // Corrections may change the price actually charged. New checkouts always use the catalog price.
@@ -163,11 +167,11 @@ export function removeOrderFromLedger(row, previousOrder) {
   const remaining = moneyCents(row.Takoyaki_Sales) - moneyCents(previousOrder.total);
   if (remaining < 0) throw mismatch();
   return {
-      ...row,
-      Takoyaki_Sales: remaining / 100,
-      Product_Sales_JSON: JSON.stringify(sold),
-      Custom_Sales_JSON: JSON.stringify(custom),
-    };
+    ...row,
+    Takoyaki_Sales: remaining / 100,
+    Product_Sales_JSON: JSON.stringify(sold),
+    Custom_Sales_JSON: JSON.stringify(custom),
+  };
 }
 
 export function replaceOrderInLedger(row, previousOrder, nextOrder) {

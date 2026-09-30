@@ -425,10 +425,7 @@ export default function PosPage() {
                     {orders.map((order) => (
                       <li key={order.id} className="hover:bg-slate-50">
                         <div className="flex w-full flex-wrap items-center justify-between gap-3 p-5">
-                          <button
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => setSlip({ order })}
-                          >
+                          <button className="min-w-0 flex-1 text-left" onClick={() => setSlip({ order })}>
                             <div className="min-w-0">
                               <p className="font-semibold text-slate-800">
                                 {orderNumber(order.number)}{' '}

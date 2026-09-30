@@ -61,7 +61,16 @@ export function normalizeAttendance(records, start, payroll) {
       otRate: amount(rate.otRate, `${staff}: OT rate`),
       quotaTarget: amount(rate.quotaTarget, 'Sales quota'),
     };
-    return { date, staff, onDuty: record.onDuty, overtimeHours: money(overtimeHours), rates };
+    if (record.scheduled != null && typeof record.scheduled !== 'boolean')
+      throw new Error('Scheduled must be true or false.');
+    return {
+      date,
+      staff,
+      scheduled: record.scheduled == null ? record.onDuty : record.scheduled,
+      onDuty: record.onDuty,
+      overtimeHours: money(overtimeHours),
+      rates,
+    };
   });
 }
 

@@ -48,6 +48,7 @@ test('each on-duty staff member earns their configured daily, quota and overtime
 
 test('saved attendance keeps pay rates when current settings change', () => {
   const saved = normalizeAttendance(records, start, payroll);
+  assert.equal(saved[0].scheduled, true, 'old duty records default to scheduled');
   const changed = normalizePayroll({
     quotaTarget: 8000,
     staffRates: { Ana: { dailyRate: 900, quotaBonus: 10, otRate: 100 } },
@@ -78,6 +79,24 @@ test('invalid attendance, rates and overtime are rejected before saving', () => 
   );
   assert.throws(() => normalizePayroll({ staffRates: { Ana: { dailyRate: -1 } } }), /daily rate/);
   assert.throws(() => normalizePayroll({ quotaTarget: '' }), /required/);
+  assert.throws(
+    () => normalizeAttendance([{ ...records[0], scheduled: 'yes' }], start, payroll),
+    /Scheduled/,
+  );
+});
+
+test('schedule can differ from actual duty without affecting pay', () => {
+  const saved = normalizeAttendance(
+    [
+      { staff: 'Ana', date: start, scheduled: true, onDuty: false, overtimeHours: 0 },
+      { staff: 'Ana', date: '2026-09-21', scheduled: false, onDuty: true, overtimeHours: 0 },
+    ],
+    start,
+    payroll,
+  );
+  assert.equal(saved[0].scheduled, true);
+  assert.equal(saved[1].scheduled, false);
+  assert.equal(buildPayslip('Ana', start, saved, {}, payroll).totals.days, 1);
 });
 
 test('custom-only and mixed orders accumulate once without repricing historical sales', () => {

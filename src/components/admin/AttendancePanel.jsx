@@ -16,6 +16,8 @@ import { buildPayslip, normalizeAttendance, normalizePayroll, staffRate } from '
 import { peso } from '../../lib/sales.js';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const recordFor = (records, staff, date) =>
+  records.find((record) => record.staff === staff && record.date === date);
 const eventTime = (raw) =>
   new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila',
@@ -98,7 +100,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
           const existing = (data.records || []).find(
             (record) => record.staff === name && record.date === date,
           );
-          return { date, staff: name, onDuty: false, overtimeHours: 0, ...existing };
+          return { date, staff: name, scheduled: false, onDuty: false, overtimeHours: 0, ...existing };
         }),
       );
       setStaff(members);
@@ -234,14 +236,17 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                 {week} – {addDays(week, 6)}
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                Sales days and face check-ins suggest duty. Review each person before saving. Quota: daily
-                sales above {peso(payroll.quotaTarget)}.
+                Set each staff member's schedule for this week, then record actual duty and overtime. Quota:
+                daily sales above {peso(payroll.quotaTarget)}.
               </p>
             </div>
             {names.length ? (
               <ul className="divide-y divide-slate-100">
                 {names.map((name) => {
                   const slip = payslips.items[name];
+                  const scheduledDays = records.filter(
+                    (record) => record.staff === name && record.scheduled,
+                  ).length;
                   const unsavedRates = records.some((record) => record.staff === name && !record.rates);
                   return (
                     <li key={name} className="p-5">
@@ -249,8 +254,8 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                         <div className="min-w-0">
                           <p className="break-words font-semibold text-slate-800">{name}</p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {slip?.totals.days || 0} days · {slip?.totals.quotaDays || 0} quota days ·{' '}
-                            {slip?.totals.overtimeHours || 0}h OT
+                            {scheduledDays} scheduled · {slip?.totals.days || 0} worked ·{' '}
+                            {slip?.totals.quotaDays || 0} quota days · {slip?.totals.overtimeHours || 0}h OT
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -268,7 +273,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                             disabled={busy}
                             onClick={() => setSelected(name)}
                           >
-                            Edit days
+                            Schedule & days
                           </button>
                           <button
                             className="md-btn md-btn-outline min-h-11"
@@ -287,13 +292,13 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                           return (
                             <div
                               key={date}
-                              className={`rounded-lg px-1 py-2 text-center ${day?.onDuty ? 'bg-[var(--brand-soft)] text-[var(--p-4)]' : 'bg-slate-50 text-slate-400'}`}
+                              className={`rounded-lg px-1 py-2 text-center ${day?.onDuty ? 'bg-[var(--brand-soft)] text-[var(--p-4)]' : recordFor(records, name, date)?.scheduled ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-400'}`}
                             >
                               <span className="block text-[10px]">
                                 {DAYS[index]} {date.slice(8)}
                               </span>
                               <span className="mt-1 block text-xs font-semibold">
-                                {day?.onDuty ? 'Duty' : '—'}
+                                {day?.onDuty ? 'Duty' : recordFor(records, name, date)?.scheduled ? 'Scheduled' : 'Off'}
                               </span>
                               {day?.quotaHit && (
                                 <span className="mt-1 block text-[10px] font-semibold">Quota</span>
@@ -336,7 +341,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                 <div>
                   <h3 className="section-title">Daily details</h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    Overtime is paid in addition to the daily rate.
+                    Schedule days can change every week. Salary uses actual duty, not scheduled days.
                   </p>
                 </div>
                 <button
@@ -377,7 +382,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                   return (
                     <div
                       key={date}
-                      className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-[100px_90px_minmax(0,1fr)_150px] sm:items-center sm:p-5"
+                      className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-[90px_95px_80px_minmax(0,1fr)_135px] sm:items-center sm:p-5"
                     >
                       <div>
                         <p className="text-sm font-semibold">
@@ -391,6 +396,16 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                             : 'Off duty'}
                         </p>
                       </div>
+                      <label className="flex min-h-11 items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-amber-600"
+                          aria-label={`${selected} scheduled ${date}`}
+                          checked={record.scheduled}
+                          onChange={(event) => update(date, { scheduled: event.target.checked })}
+                        />
+                        Scheduled
+                      </label>
                       <label className="flex min-h-11 items-center gap-2 text-sm">
                         <input
                           type="checkbox"

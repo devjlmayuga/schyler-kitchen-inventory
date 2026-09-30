@@ -121,6 +121,12 @@ CREATE TABLE IF NOT EXISTS attendance (
 -- Pay rates are captured with attendance so later settings changes do not reprice saved weeks.
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS overtime_hours numeric(5,2) NOT NULL DEFAULT 0 CHECK (overtime_hours >= 0 AND overtime_hours <= 24);
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS pay_rates jsonb;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS scheduled boolean NOT NULL DEFAULT false;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_versions WHERE version=7) THEN
+    UPDATE attendance SET scheduled=on_duty;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS face_profiles (
   staff_id bigint PRIMARY KEY REFERENCES staff_members(id) ON DELETE CASCADE,
@@ -179,5 +185,5 @@ CREATE TABLE IF NOT EXISTS application_write_log (
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO schema_versions(version) VALUES (1),(2),(3),(4),(5),(6) ON CONFLICT DO NOTHING;
+INSERT INTO schema_versions(version) VALUES (1),(2),(3),(4),(5),(6),(7) ON CONFLICT DO NOTHING;
 COMMIT;

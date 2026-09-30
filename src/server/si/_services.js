@@ -345,8 +345,8 @@ export async function attendanceListWeek({ weekStart }) {
   const data = await getAutoAttendanceWeek(weekStart, weekEnd);
   const staff = normalizeSalesConfig(data.config).staff;
   const openDates = data.openDates;
-  const byStaffDate = new Map(staff.flatMap((name) => openDates.map((date) => [`${name}\n${date}`, { date, staff: name, onDuty: true }])));
-  data.faceRecords.forEach(({ date, staff: name }) => byStaffDate.set(`${name}\n${date}`, { date, staff: name, onDuty: true }));
+  const byStaffDate = new Map(staff.flatMap((name) => openDates.map((date) => [`${name}\n${date}`, { date, staff: name, scheduled: true, onDuty: true }])));
+  data.faceRecords.forEach(({ date, staff: name }) => byStaffDate.set(`${name}\n${date}`, { date, staff: name, scheduled: false, onDuty: true }));
   data.manualRecords.forEach((record) => byStaffDate.set(`${record.staff}\n${record.date}`, record));
   const records = [...byStaffDate.values()];
   return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales', salesByDate: data.salesByDate, payroll: normalizeSalesConfig(data.config).payroll };
@@ -359,7 +359,7 @@ export async function attendanceSaveWeek({ weekStart, records }) {
   await ensureAttendanceSheet();
   const { config } = await salesConfigGet();
   const normalized = normalizeAttendance(records, weekStart, config.payroll);
-  const saved = normalized.map((r) => ({ Date: r.date, Staff: r.staff, On_Duty: r.onDuty ? 'Y' : 'N', Overtime_Hours: r.overtimeHours, Pay_Rates: r.rates }));
+  const saved = normalized.map((r) => ({ Date: r.date, Staff: r.staff, Scheduled: r.scheduled ? 'Y' : 'N', On_Duty: r.onDuty ? 'Y' : 'N', Overtime_Hours: r.overtimeHours, Pay_Rates: r.rates }));
   await replaceAttendanceWeek(weekStart, weekEnd, saved);
   return { weekStart, weekEnd, saved: saved.length, records: normalized };
 }

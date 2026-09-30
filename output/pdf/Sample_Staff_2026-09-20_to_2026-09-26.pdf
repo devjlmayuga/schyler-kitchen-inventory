@@ -1,0 +1,128 @@
+%PDF-1.4
+%PDFGEN
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 5730 >>
+stream
+1 1 1 rg 0 0 595.28 841.89 re f
+0.91 0.16 0.28 rg 0 832.89 595.28 9 re f
+0.12 0.16 0.23 rg BT /F2 18 Tf 42 786.89 Td (Schyler's Kitchen) Tj ET
+0.39 0.45 0.55 rg BT /F2 9 Tf 42 765.89 Td (STAFF PAYSLIP) Tj ET
+0.12 0.16 0.23 rg BT /F2 12 Tf 475.52 786.89 Td (Sample Staff) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 447.43999999999994 766.89 Td (2026-09-20 to 2026-09-26) Tj ET
+0.91 0.16 0.28 RG 2 w 42 747.89 m 553.28 747.89 l S
+0.97 0.98 0.99 rg 42 674.89 157 55 re f
+0.39 0.45 0.55 rg BT /F1 8 Tf 54 707.89 Td (Days worked) Tj ET
+0.12 0.16 0.23 rg BT /F2 16 Tf 54 684.89 Td (5) Tj ET
+0.97 0.98 0.99 rg 213 674.89 157 55 re f
+0.39 0.45 0.55 rg BT /F1 8 Tf 225 707.89 Td (Quota days) Tj ET
+0.12 0.16 0.23 rg BT /F2 16 Tf 225 684.89 Td (3) Tj ET
+0.97 0.98 0.99 rg 384 674.89 157 55 re f
+0.39 0.45 0.55 rg BT /F1 8 Tf 396 707.89 Td (Overtime hours) Tj ET
+0.12 0.16 0.23 rg BT /F2 16 Tf 396 684.89 Td (1.5) Tj ET
+0.95 0.96 0.98 rg 42 623.89 511.28 28 re f
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 49 633.89 Td (Date) Tj ET
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 133 633.89 Td (Duty) Tj ET
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 191 633.89 Td (Base pay) Tj ET
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 274 633.89 Td (Quota bonus) Tj ET
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 362 633.89 Td (Overtime) Tj ET
+0.29 0.35 0.44 rg BT /F2 7.5 Tf 460 633.89 Td (Total) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 600.89 Td (2026-09-20) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 600.89 Td (Yes) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 600.89 Td (PHP 400.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 600.89 Td (PHP 50.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 600.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 600.89 Td (PHP 450.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 584.89 m 553.28 584.89 l S
+0.985 0.988 0.992 rg 42 545.89 511.28 39 re f
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 561.89 Td (2026-09-21) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 561.89 Td (Yes) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 561.89 Td (PHP 400.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 561.89 Td (PHP 50.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 561.89 Td (PHP 75.00 \(1.5h\)) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 561.89 Td (PHP 525.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 545.89 m 553.28 545.89 l S
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 522.89 Td (2026-09-22) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 522.89 Td (Yes) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 522.89 Td (PHP 400.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 522.89 Td (PHP 50.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 522.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 522.89 Td (PHP 450.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 506.89 m 553.28 506.89 l S
+0.985 0.988 0.992 rg 42 467.89 511.28 39 re f
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 483.89 Td (2026-09-23) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 483.89 Td (Yes) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 483.89 Td (PHP 400.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 483.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 483.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 483.89 Td (PHP 400.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 467.89 m 553.28 467.89 l S
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 444.89 Td (2026-09-24) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 444.89 Td (Yes) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 444.89 Td (PHP 400.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 444.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 444.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 444.89 Td (PHP 400.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 428.89 m 553.28 428.89 l S
+0.985 0.988 0.992 rg 42 389.89 511.28 39 re f
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 405.89 Td (2026-09-25) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 405.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 405.89 Td (PHP 0.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 405.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 405.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 405.89 Td (PHP 0.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 389.89 m 553.28 389.89 l S
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 49 366.89 Td (2026-09-26) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 133 366.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 191 366.89 Td (PHP 0.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.8 Tf 274 366.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F1 7.2 Tf 362 366.89 Td (-) Tj ET
+0.12 0.16 0.23 rg BT /F2 7.8 Tf 460 366.89 Td (PHP 0.00) Tj ET
+0.82 0.85 0.89 RG 0.5 w 42 350.89 m 553.28 350.89 l S
+0.39 0.45 0.55 rg BT /F2 9 Tf 340 319.89 Td (PAY SUMMARY) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 340 292.89 Td (Base pay) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 500.35999999999996 292.89 Td (PHP 2,000.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 340 267.89 Td (Quota bonus) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 509.17999999999995 267.89 Td (PHP 150.00) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 340 242.89 Td (Overtime pay) Tj ET
+0.12 0.16 0.23 rg BT /F1 9 Tf 513.5899999999999 242.89 Td (PHP 75.00) Tj ET
+0.12 0.16 0.23 RG 1.5 w 340 228.89 m 553.28 228.89 l S
+0.12 0.16 0.23 rg BT /F2 11 Tf 340 203.89 Td (Total earnings) Tj ET
+0.12 0.16 0.23 rg BT /F2 11 Tf 482 203.89 Td (PHP 2,225.00) Tj ET
+0.39 0.45 0.55 rg BT /F1 8 Tf 42 167.89 Td (Quota bonuses apply on duty days when shop sales exceed the saved daily target.) Tj ET
+0.39 0.45 0.55 rg BT /F1 8 Tf 42 153.89 Td (Amounts shown are earnings before any deductions.) Tj ET
+0.39 0.45 0.55 RG 0.7 w 42 93.88999999999999 m 235 93.88999999999999 l S
+0.39 0.45 0.55 RG 0.7 w 360 93.88999999999999 m 553.28 93.88999999999999 l S
+0.39 0.45 0.55 rg BT /F1 8 Tf 42 76.88999999999999 Td (Prepared by) Tj ET
+0.39 0.45 0.55 rg BT /F1 8 Tf 360 76.88999999999999 Td (Received by / Date) Tj ET
+0.12 0.16 0.23 rg BT /F1 7 Tf 416.08 31.889999999999986 Td (Generated from Schyler Kitchen Inventory) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000017 00000 n 
+0000000066 00000 n 
+0000000123 00000 n 
+0000000265 00000 n 
+0000000335 00000 n 
+0000000410 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+6191
+%%EOF

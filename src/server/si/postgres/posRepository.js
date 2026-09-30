@@ -77,9 +77,12 @@ export async function hasPosOrders(date) {
 }
 
 export async function markOrderDeleted({ id, reason, cashier }) {
-  const result = await dbClient().query(`update schyler_kitchen.pos_orders
+  const result = await dbClient().query(
+    `update schyler_kitchen.pos_orders
     set deleted_at=now(),deleted_by=$2,deletion_reason=$3,revision=revision+1,updated_at=now(),updated_by=$2
-    where id=$1::uuid returning *,business_date::text`, [id,cashier,reason]);
+    where id=$1::uuid returning *,business_date::text`,
+    [id, cashier, reason],
+  );
   return mapOrder(result.rows[0]);
 }
 

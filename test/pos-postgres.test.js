@@ -174,6 +174,35 @@ test(
         assert.equal(restored.order.revision, 3);
         assert.equal(restored.summary.count, 2);
         assert.equal((await call('products.list')).items.find((item) => item.Name === name).Price, 90);
+        const deleted = await call('pos.delete', {
+          id: input.id,
+          revision: restored.order.revision,
+          reason: 'Duplicate sale',
+        });
+        assert.equal(deleted.order.deletedBy, 'api-token');
+        assert.equal(deleted.order.deletionReason, 'Duplicate sale');
+        assert.equal(deleted.sales.Takoyaki_Sales, 1360);
+        assert.equal(deleted.sales.Expenses_Total, 200);
+        assert.equal(deleted.sales.Remaining_Balance, 1210);
+        assert.equal(deleted.summary.count, 1);
+        assert.equal(
+          (await call('pos.orders', { date })).orders.some((order) => order.id === input.id),
+          false,
+        );
+        const deleteRetry = await call('pos.delete', { id: input.id, revision: 1 });
+        assert.equal(deleteRetry.repeated, true);
+        assert.equal(deleteRetry.sales.Takoyaki_Sales, 1360);
+        await assert.rejects(call('pos.complete', input), /deleted/);
+        await assert.rejects(
+          call('pos.edit', { ...edit, revision: 4, editId: crypto.randomUUID() }),
+          /deleted/,
+        );
+        const deletedRow = await dbClient().query(
+          'select deleted_at,deleted_by,deletion_reason from schyler_kitchen.pos_orders where id=$1',
+          [input.id],
+        );
+        assert.ok(deletedRow.rows[0].deleted_at);
+        assert.equal(deletedRow.rows[0].deletion_reason, 'Duplicate sale');
         // Exercise >30 orders and cursor pagination without touching the daily ledger.
         await dbClient().query(
           `insert into schyler_kitchen.pos_orders(id,business_date,created_by,request_hash,details,total)
@@ -184,7 +213,7 @@ test(
         assert.equal(page.orders.length, 30);
         assert.ok(page.nextCursor);
         const next = await call('pos.orders', { date, before: page.nextCursor });
-        assert.equal(next.orders.length, 3);
+        assert.equal(next.orders.length, 2);
         assert.equal(next.nextCursor, null);
         assert.ok(next.orders.every((order) => !page.orders.some((previous) => previous.id === order.id)));
         throw rollback;
