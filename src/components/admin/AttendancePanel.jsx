@@ -456,7 +456,6 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                           />
                           <span className="text-xs text-slate-500">hrs</span>
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">{peso(rate.otRate)} / hour</p>
                       </div>
                     </div>
                   );

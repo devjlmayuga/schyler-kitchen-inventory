@@ -85,16 +85,7 @@ export default function PayslipPreview({ payslip, onClose }) {
                     <td>{peso(day.base)}</td>
                     <td>{day.quotaHit ? peso(day.bonus) : '—'}</td>
                     <td>
-                      {day.overtimeHours ? (
-                        <>
-                          {peso(day.overtime)}
-                          <small>
-                            {day.overtimeHours}h × {peso(day.rates.otRate)}
-                          </small>
-                        </>
-                      ) : (
-                        '—'
-                      )}
+                      {day.overtimeHours ? peso(day.overtime) : '—'}
                     </td>
                     <td>{peso(day.total)}</td>
                   </tr>
