@@ -77,7 +77,7 @@ export function buildPayslipPdf(payslip) {
       day.onDuty ? 'Yes' : '-',
       amount(day.base),
       day.quotaHit ? amount(day.bonus) : '-',
-      day.overtimeHours ? `${amount(day.overtime)} (${day.overtimeHours}h)` : '-',
+      day.overtimeHours ? `${amount(day.overtime)}` : '-',
       amount(day.total),
     ];
     values.forEach((value, index) =>
