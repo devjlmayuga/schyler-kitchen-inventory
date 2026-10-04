@@ -61,7 +61,7 @@ export default function PayslipPreview({ payslip, onClose }) {
               <p className="mt-1 text-lg font-semibold">{totals.quotaDays}</p>
             </div>
             <div>
-              <p className="text-slate-500">Overtime hours</p>
+              <p className="text-slate-500">Overtime</p>
               <p className="mt-1 text-lg font-semibold">{totals.overtimeHours}</p>
             </div>
           </div>

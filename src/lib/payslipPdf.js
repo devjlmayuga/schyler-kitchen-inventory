@@ -56,7 +56,7 @@ export function buildPayslipPdf(payslip) {
   const cards = [
     ['Days worked', totals.days],
     ['Quota days', totals.quotaDays],
-    ['Overtime hours', totals.overtimeHours],
+    ['Overtime', totals.overtimeHours],
   ];
   cards.forEach(([label, value], index) => {
     const x = MARGIN + index * 171;
