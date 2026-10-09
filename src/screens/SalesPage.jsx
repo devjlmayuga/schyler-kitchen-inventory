@@ -20,7 +20,13 @@ import { ActionMenu, EmptyState } from '../components/ScreenControls.jsx';
 import { apiGet, apiPost } from '../lib/apiClient.js';
 import { isoDateToday } from '../lib/dates.js';
 import { parseMoney } from '../lib/money.js';
-import { ledgerTotals, peso, readAmountMap, readCustomEntries } from '../lib/sales.js';
+import {
+  groupProductSalesByCategory,
+  ledgerTotals,
+  peso,
+  readAmountMap,
+  readCustomEntries,
+} from '../lib/sales.js';
 import useUnsavedChanges from '../lib/useUnsavedChanges.js';
 
 const DEFAULT_CONFIG = {
@@ -164,6 +170,7 @@ export default function SalesPage() {
   const [orderCount, setOrderCount] = useState(0);
   const [conflict, setConflict] = useState(false);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [products, setProducts] = useState([]);
   const [expenseDraft, setExpenseDraft] = useState({ description: '', amount: '' });
   const pendingEntry = !!(expenseDraft.description || expenseDraft.amount);
   const [showHistory, setShowHistory] = useState(false);
@@ -181,6 +188,7 @@ export default function SalesPage() {
   const totals = ledgerTotals(row, fields);
   const staffAmounts = readAmountMap(row.Staff_Expenses_JSON);
   const sold = readAmountMap(row.Product_Sales_JSON);
+  const salesByCategory = groupProductSalesByCategory(sold, products);
   const customSales = readCustomEntries(row.Custom_Sales_JSON);
   const customExpenses = readCustomEntries(row.Custom_Expenses_JSON);
   const staffNames = [...new Set([...(config.staff || []), ...Object.keys(staffAmounts)])];
@@ -211,6 +219,7 @@ export default function SalesPage() {
           : DEFAULT_CONFIG.expenseBreakdown,
         staff: Array.isArray(data.config?.staff) ? data.config.staff : [],
       });
+      setProducts(Array.isArray(data.products) ? data.products : []);
       setReady(true);
     } catch (e) {
       if (id === request.current) setError(e?.message || 'Unable to load sales. Please try again.');
@@ -296,13 +305,16 @@ export default function SalesPage() {
   }
 
   async function copySummary() {
+    const productLines = salesByCategory.flatMap((group) => [
+      `${group.category} products (${group.quantity} sold)`,
+      ...group.items.map((item) => `  ${item.name} × ${item.qty}`),
+    ]);
     const text = [
       `Sales summary · ${date}`,
-      `Sales: ${peso(totals.sales)}`,
+      ...salesByCategory.map((group) => `${group.category} Sales: ${peso(group.amount)}`),
+      `Total Sales: ${peso(totals.sales)}`,
       '',
-      ...Object.entries(sold)
-        .filter(([, qty]) => qty)
-        .map(([name, qty]) => `${name} × ${qty}`),
+      ...(productLines.length ? ['Product sales by category', ...productLines] : []),
       '',
       ...customSales.map((entry) => `${entry.description}: ${peso(entry.amount)}`),
       ...customExpenses.map((entry) => `Other expense · ${entry.description}: ${peso(entry.amount)}`),
@@ -493,18 +505,28 @@ export default function SalesPage() {
                   <h2 className="section-title">Day’s sales</h2>
                   <p className="mt-1 text-xs text-slate-500">All products recorded for {date}.</p>
                 </div>
-                {Object.entries(sold).some(([, qty]) => qty > 0) || customSales.length ? (
+                {salesByCategory.length || customSales.length ? (
                   <div className="divide-y divide-slate-100 px-5">
-                    {Object.entries(sold)
-                      .filter(([, qty]) => qty > 0)
-                      .map(([name, qty]) => (
-                        <div key={name} className="flex items-center justify-between gap-3 py-3 text-sm">
-                          <span className="font-medium text-slate-700">{name}</span>
-                          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-600">
-                            × {qty}
+                    {salesByCategory.map((group) => (
+                      <section key={group.category} className="py-3">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {group.category}
+                          </h3>
+                          <span className="text-xs tabular-nums text-slate-400">
+                            {group.quantity} sold
                           </span>
                         </div>
-                      ))}
+                        {group.items.map(({ name, qty }) => (
+                          <div key={name} className="flex items-center justify-between gap-3 py-2 text-sm">
+                            <span className="font-medium text-slate-700">{name}</span>
+                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-600">
+                              × {qty}
+                            </span>
+                          </div>
+                        ))}
+                      </section>
+                    ))}
                     {customSales.map((entry, index) => (
                       <div
                         key={`custom-${index}`}
@@ -529,9 +551,15 @@ export default function SalesPage() {
                   </EmptyState>
                 )}
                 <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 p-5 text-sm">
+                  {salesByCategory.map((group) => (
+                    <div key={group.category} className="flex justify-between">
+                      <span className="text-slate-500">{group.category} Sales</span>
+                      <span className="font-medium tabular-nums">{peso(group.amount)}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Sales</span>
-                    <span className="font-medium tabular-nums">{peso(totals.sales)}</span>
+                    <span className="font-medium text-slate-700">Total Sales</span>
+                    <span className="font-semibold tabular-nums">{peso(totals.sales)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Expenses</span>

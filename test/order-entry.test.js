@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { appendSale, ledgerTotals, orderLines, readAmountMap } from '../src/lib/sales.js';
+import {
+  appendSale,
+  groupProductSalesByCategory,
+  ledgerTotals,
+  orderLines,
+  readAmountMap,
+} from '../src/lib/sales.js';
 import { closingQuantity, isLowStock, prepareInventory } from '../src/lib/inventory.js';
 
 const products = [
@@ -29,6 +35,42 @@ test('manual-only historical revenue and cent amounts survive an added order', (
   const next = appendSale({ Takoyaki_Sales: 123.45 }, [{ Name: 'Extra', Price: 0.1 }], { Extra: 3 });
   assert.equal(next.Takoyaki_Sales, 123.75);
   assert.equal(readAmountMap(next.Product_Sales_JSON).Extra, 3);
+});
+
+test('product sales are grouped by catalog category with historical items retained', () => {
+  assert.deepEqual(
+    groupProductSalesByCategory(
+      { Cheese: 3, Bacon: 2, Soda: 4, Retired: 1, Empty: 0 },
+      [
+        { Name: 'Cheese', Category: 'Takoyaki', Price: 65 },
+        { Name: 'Bacon', Category: 'Takoyaki', Price: 75 },
+        { Name: 'Soda', Category: 'Drinks', Price: 20 },
+      ],
+    ),
+    [
+      {
+        category: 'Takoyaki',
+        items: [
+          { name: 'Cheese', qty: 3, amount: 195 },
+          { name: 'Bacon', qty: 2, amount: 150 },
+        ],
+        quantity: 5,
+        amount: 345,
+      },
+      {
+        category: 'Drinks',
+        items: [{ name: 'Soda', qty: 4, amount: 80 }],
+        quantity: 4,
+        amount: 80,
+      },
+      {
+        category: 'Uncategorized',
+        items: [{ name: 'Retired', qty: 1, amount: 0 }],
+        quantity: 1,
+        amount: 0,
+      },
+    ],
+  );
 });
 
 test('invalid or empty baskets cannot be recorded', () => {

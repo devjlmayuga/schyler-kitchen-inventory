@@ -18,6 +18,33 @@ export function readAmountMap(raw) {
   );
 }
 
+export function groupProductSalesByCategory(sold, products) {
+  const catalog = new Map(
+    (Array.isArray(products) ? products : []).map((product) => [
+      String(product?.Name || '').trim().toLocaleLowerCase(),
+      {
+        category: String(product?.Category || '').trim() || 'Uncategorized',
+        price: parseMoney(product?.Price),
+      },
+    ]),
+  );
+  const groups = new Map();
+  Object.entries(sold || {}).forEach(([name, rawQuantity]) => {
+    const qty = Number(rawQuantity);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    const product = catalog.get(String(name).trim().toLocaleLowerCase());
+    const category = product?.category || 'Uncategorized';
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push({ name, qty, amount: qty * (product?.price || 0) });
+  });
+  return [...groups].map(([category, items]) => ({
+    category,
+    items,
+    quantity: items.reduce((sum, item) => sum + item.qty, 0),
+    amount: items.reduce((sum, item) => sum + item.amount, 0),
+  }));
+}
+
 export function orderLines(products, quantities) {
   return products
     .filter((product) => Object.hasOwn(quantities, product.Name))
