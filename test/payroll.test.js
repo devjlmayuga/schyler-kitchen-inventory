@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPayslip, normalizeAttendance, normalizePayroll } from '../src/lib/payroll.js';
+import { buildPayslip, normalizeAttendance, normalizePayroll, quotaSalesForDate } from '../src/lib/payroll.js';
 import { appendSale, ledgerTotals, readCustomEntries } from '../src/lib/sales.js';
 import { normalizeCatalog } from '../src/lib/admin.js';
 
@@ -25,9 +25,25 @@ test('quota is strictly above 4000, applies only on duty, and fractional OT pays
     base: 800,
     bonus: 50,
     overtime: 175,
+    cashAdvances: 0,
     total: 1025,
+    net: 1025,
   });
   assert.equal(slip.missingRate, false);
+});
+
+test('dated staff cash advances are deducted except Sunday payroll payments', () => {
+  const slip = buildPayslip('Ana', start, records, sales, payroll, [
+    { staff: 'Ana', date: start, amount: 100 },
+    { staff: 'Ana', date: '2026-09-21', amount: 50 },
+    { staff: 'Bea', date: start, amount: 999 },
+  ]);
+  assert.equal(slip.days[0].cashAdvance, 0, 'Sunday payment belongs to the previous payroll week');
+  assert.equal(slip.days[0].net, 475);
+  assert.equal(slip.days[1].cashAdvance, 50);
+  assert.equal(slip.totals.cashAdvances, 50);
+  assert.equal(slip.totals.total, 1025);
+  assert.equal(slip.totals.net, 975);
 });
 
 test('each on-duty staff member earns their configured daily, quota and overtime rates', () => {
@@ -44,6 +60,22 @@ test('each on-duty staff member earns their configured daily, quota and overtime
   );
   assert.equal(slip.totals.total, 650);
   assert.equal(slip.totals.overtime, 75);
+});
+
+test('quota bonus can be limited to selected product categories', () => {
+  const selected = normalizePayroll({
+    quotaTarget: 4000,
+    quotaCategories: ['Takoyaki'],
+    staffRates: { Ana: { dailyRate: 400 } },
+  });
+  const categorySales = { [start]: { Takoyaki: 3500, Wagyu: 2000 } };
+  const slip = buildPayslip('Ana', start, records, { [start]: 5500 }, selected, [], categorySales);
+  assert.equal(slip.days[0].sales, 3500);
+  assert.equal(slip.days[0].quotaHit, false);
+  assert.equal(quotaSalesForDate(start, { quotaCategories: [] }, { [start]: 5500 }, categorySales), 5500);
+
+  const saved = normalizeAttendance([records[0]], start, selected);
+  assert.deepEqual(saved[0].rates.quotaCategories, ['Takoyaki']);
 });
 
 test('saved attendance keeps pay rates when current settings change', () => {

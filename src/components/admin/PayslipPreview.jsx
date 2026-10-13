@@ -74,7 +74,8 @@ export default function PayslipPreview({ payslip, onClose }) {
                   <th>Base pay</th>
                   <th>Quota bonus</th>
                   <th>Overtime</th>
-                  <th>Total</th>
+                  <th>Cash advance</th>
+                  <th>Net pay</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,7 +88,8 @@ export default function PayslipPreview({ payslip, onClose }) {
                     <td>
                       {day.overtimeHours ? peso(day.overtime) : '—'}
                     </td>
-                    <td>{peso(day.total)}</td>
+                    <td>{day.cashAdvance ? `− ${peso(day.cashAdvance)}` : '—'}</td>
+                    <td>{peso(day.net)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -106,14 +108,23 @@ export default function PayslipPreview({ payslip, onClose }) {
               <dt>Overtime pay</dt>
               <dd>{peso(totals.overtime)}</dd>
             </div>
-            <div className="flex justify-between border-t-2 border-slate-800 pt-3 text-base font-bold">
-              <dt>Total earnings</dt>
+            <div className="flex justify-between">
+              <dt>Gross earnings</dt>
               <dd>{peso(totals.total)}</dd>
+            </div>
+            <div className="flex justify-between text-red-700">
+              <dt>Cash advances</dt>
+              <dd>− {peso(totals.cashAdvances)}</dd>
+            </div>
+            <div className="flex justify-between border-t-2 border-slate-800 pt-3 text-base font-bold">
+              <dt>Net pay</dt>
+              <dd>{peso(totals.net)}</dd>
             </div>
           </dl>
           <p className="mt-6 text-xs leading-relaxed text-slate-500">
-            Quota bonuses apply on duty days when shop sales exceed the saved daily target. Amounts shown are
-            earnings before any deductions.
+            Quota bonuses apply on duty days when eligible sales exceed the saved daily target. Dated staff
+            payouts recorded Monday–Saturday are deducted as cash advances; Sunday payments belong to the
+            previous payroll week.
           </p>
           <div className="mt-14 grid grid-cols-2 gap-10 text-xs text-slate-600">
             <div className="border-t border-slate-400 pt-2">Prepared by</div>

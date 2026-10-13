@@ -2,7 +2,7 @@ import { lockSalesDay, hasPosOrders } from './postgres/posRepository.js';
 import { orderError } from '../../lib/pos.js';
 import { normalizePayroll, normalizeAttendance } from '../../lib/payroll.js';
 import { normalizeCatalog } from '../../lib/admin.js';
-import { readCustomEntries } from '../../lib/sales.js';
+import { groupProductSalesByCategory, readAmountMap, readCustomEntries } from '../../lib/sales.js';
 import crypto from 'node:crypto';
 import {
   ensureHeaders,
@@ -246,11 +246,11 @@ function normalizeSalesConfig(config) {
 }
 
 function normalizeStaffExpenses(value) {
-  if (!value) return { json: '', total: 0 };
+  if (!value) return { json: '', total: 0, amounts: {} };
   let obj = null;
   if (typeof value === 'string') {
     const raw = value.trim();
-    if (!raw) return { json: '', total: 0 };
+    if (!raw) return { json: '', total: 0, amounts: {} };
     try {
       obj = JSON.parse(raw);
     } catch {
@@ -259,7 +259,7 @@ function normalizeStaffExpenses(value) {
   } else if (typeof value === 'object') {
     obj = value;
   }
-  if (!obj || typeof obj !== 'object') return { json: '', total: 0 };
+  if (!obj || typeof obj !== 'object') return { json: '', total: 0, amounts: {} };
 
   const normalized = {};
   let total = 0;
@@ -272,7 +272,7 @@ function normalizeStaffExpenses(value) {
     total += amount;
   });
   const json = Object.keys(normalized).length ? JSON.stringify(normalized) : '';
-  return { json, total };
+  return { json, total, amounts: normalized };
 }
 
 // ---------------- Auth ----------------
@@ -375,13 +375,25 @@ export async function attendanceListWeek({ weekStart }) {
       byStaffDate.set(key, { ...byStaffDate.get(key), date, staff: name, scheduled: !!byStaffDate.get(key)?.scheduled, onDuty: true });
     }),
   );
+  data.manualRecords.forEach((record) => byStaffDate.set(`${record.staff}\n${record.date}`, record));
+  // A verified face event is proof of actual duty and must not be overwritten by
+  // a previously saved off-duty value for the same staff member and date.
   data.faceRecords.forEach(({ date, staff: name }) => {
     const key = `${name}\n${date}`;
     byStaffDate.set(key, { ...byStaffDate.get(key), date, staff: name, scheduled: !!byStaffDate.get(key)?.scheduled, onDuty: true });
   });
-  data.manualRecords.forEach((record) => byStaffDate.set(`${record.staff}\n${record.date}`, record));
   const records = [...byStaffDate.values()];
-  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales', salesByDate: data.salesByDate, payroll: config.payroll };
+  const cashAdvances = Object.entries(data.staffExpensesByDate || {}).flatMap(([date, raw]) =>
+    Object.entries(normalizeStaffExpenses(raw).amounts).map(([name, amount]) => ({ date, staff: name, amount })),
+  );
+  const categorySalesByDate = Object.fromEntries(
+    Object.entries(data.productSalesByDate || {}).map(([date, raw]) => {
+      let sold = {};
+      try { sold = readAmountMap(raw); } catch { /* Preserve older totals without readable product details. */ }
+      return [date, Object.fromEntries(groupProductSalesByCategory(sold, data.products).map((group) => [group.category, group.amount]))];
+    }),
+  );
+  return { weekStart, weekEnd, records, openDates, derivedFrom: 'sales-and-face', salesByDate: data.salesByDate, categorySalesByDate, cashAdvances, payroll: config.payroll };
 }
 
 export async function attendanceSaveWeek({ weekStart, records }) {

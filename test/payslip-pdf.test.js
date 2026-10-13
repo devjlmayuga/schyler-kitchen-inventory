@@ -14,9 +14,11 @@ const payslip = {
     base: index < 5 ? 400 : 0,
     bonus: index < 3 ? 50 : 0,
     overtime: index === 1 ? 75 : 0,
+    cashAdvance: index === 2 ? 100 : 0,
     total: index < 5 ? 400 + (index < 3 ? 50 : 0) + (index === 1 ? 75 : 0) : 0,
+    net: index < 5 ? 400 + (index < 3 ? 50 : 0) + (index === 1 ? 75 : 0) - (index === 2 ? 100 : 0) : 0,
   })),
-  totals: { days: 5, quotaDays: 3, overtimeHours: 1.5, base: 2000, bonus: 150, overtime: 75, total: 2225 },
+  totals: { days: 5, quotaDays: 3, overtimeHours: 1.5, base: 2000, bonus: 150, overtime: 75, cashAdvances: 100, total: 2225, net: 2125 },
 };
 
 test('payslip PDF has a safe staff and date coverage filename and complete one-page content', () => {
@@ -26,8 +28,10 @@ test('payslip PDF has a safe staff and date coverage filename and complete one-p
   assert.match(text, /^%PDF-1\.4/);
   assert.match(text, /Ana Marie \/ Test/);
   assert.match(text, /2026-09-20 to 2026-09-26/);
-  assert.match(text, /Total earnings/);
+  assert.match(text, /Cash advance/);
+  assert.match(text, /Net pay/);
   assert.match(text, /PHP 2,225\.00/);
+  assert.match(text, /PHP 2,125\.00/);
   assert.equal((text.match(/\/Type \/Page\b/g) || []).length, 1);
   assert.match(text, /startxref\n\d+\n%%EOF/);
 });

@@ -21,6 +21,7 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
   const [success, setSuccess] = useState('');
   const [expense, setExpense] = useState('');
   const [staff, setStaff] = useState('');
+  const [productCategories, setProductCategories] = useState([]);
   const request = useRef(0);
   const writeLock = useRef(false);
   const dirty = saved !== null && JSON.stringify(config) !== JSON.stringify(saved);
@@ -38,7 +39,7 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
     setLoading(true);
     setError('');
     try {
-      const data = await apiGet('salesConfig.get');
+      const [data, catalog] = await Promise.all([apiGet('salesConfig.get'), apiGet('products.list')]);
       if (id !== request.current) return;
       const value = {
         ...data.config,
@@ -54,6 +55,9 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
       };
       setConfig(value);
       setSaved(value);
+      setProductCategories([
+        ...new Set((catalog.items || []).map((item) => String(item.Category || '').trim() || 'Uncategorized')),
+      ]);
     } catch (reason) {
       if (id === request.current) setError(reason.message || 'Unable to load settings.');
     } finally {
@@ -250,9 +254,59 @@ export default function SalesSettings({ onDirtyChange, onBusyChange }) {
                     }
                   />
                   <span className="mt-1 text-xs leading-relaxed text-slate-500">
-                    Each staff member on duty earns their bonus when shop sales exceed this amount.
+                    Each staff member on duty earns their bonus when eligible sales exceed this amount.
                   </span>
                 </label>
+                <fieldset className="mb-5 border-b border-slate-100 pb-5" aria-label="Sales categories eligible for quota">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="md-label">Sales categories eligible for quota</span>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-[var(--p-4)]"
+                      onClick={() => update({ ...config, payroll: { ...config.payroll, quotaCategories: [] } })}
+                    >
+                      Select all
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                    Select only the product categories that should count toward the daily quota. Selecting every
+                    category uses the complete saved sales total.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {productCategories.map((category) => {
+                      const selectedCategories = config.payroll.quotaCategories || [];
+                      const allSelected = selectedCategories.length === 0;
+                      const selected = allSelected || selectedCategories.includes(category);
+                      return (
+                        <label key={category} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-[var(--p-3)]"
+                            checked={selected}
+                            onChange={(event) => {
+                              const current = allSelected ? [...productCategories] : [...selectedCategories];
+                              const next = event.target.checked
+                                ? [...new Set([...current, category])]
+                                : current.filter((value) => value !== category);
+                              if (!next.length) return;
+                              update({
+                                ...config,
+                                payroll: {
+                                  ...config.payroll,
+                                  quotaCategories: next.length === productCategories.length ? [] : next,
+                                },
+                              });
+                            }}
+                          />
+                          {category}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {!productCategories.length && (
+                    <p className="mt-3 text-xs text-slate-500">Add menu product categories first.</p>
+                  )}
+                </fieldset>
                 <form className="flex gap-2" onSubmit={addStaff}>
                   <input
                     className="md-input min-w-0 flex-1"

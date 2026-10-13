@@ -86,7 +86,7 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
   assert.deepEqual(attendance.openDates, ['2099-01-02']);
   assert.ok(attendance.records.some((record) => record.date === '2099-01-02' && record.staff === 'Nathalie' && record.onDuty === true));
   assert.ok(attendance.records.some((record) => record.date === '2099-01-02' && record.staff === 'Mykah' && record.onDuty === true));
-  assert.equal(attendance.derivedFrom, 'sales');
+  assert.equal(attendance.derivedFrom, 'sales-and-face');
   assert.ok(attendance.records.some((record) => record.date === '2099-01-02' && record.staff === 'Nathalie' && record.onDuty === true));
   assert.ok(attendance.records.some((record) => record.date === '2099-01-02' && record.staff === 'Mykah' && record.onDuty === true));
   assert.equal((await call('salesFinance.list', { from: '2099-01-01', to: '2099-01-03' })).rows.length, 1);
@@ -103,6 +103,11 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
   assert.equal((await call('face.enroll', { staff: 'Nathalie', descriptor: faceDescriptor, consent: true })).enrolled, true);
   assert.equal((await call('face.profiles')).profiles.length, 1);
   assert.equal((await call('face.checkIn', { descriptor: faceDescriptor, deviceLabel: 'test-kiosk' })).staff, 'Nathalie');
+  const faceAttendance = await call('attendance.listWeek', { weekStart: new Date().toISOString().slice(0, 10) });
+  assert.ok(
+    faceAttendance.records.some((record) => record.staff === 'Nathalie' && record.onDuty === true),
+    'a verified face event should mark staff on duty',
+  );
   covered.add('face.clock');
   const publicClockOut = await dispatchAction({ action: 'face.clock', payload: { descriptor: faceDescriptor, eventType: 'CHECK_OUT', deviceLabel: 'public-kiosk' } });
   assert.equal(publicClockOut.recorded, true);

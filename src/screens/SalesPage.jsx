@@ -323,7 +323,7 @@ export default function SalesPage() {
         .map((field) => `${field.label}: ${peso(row[field.key])}`),
       ...Object.entries(staffAmounts)
         .filter(([, amount]) => amount)
-        .map(([name, amount]) => `${name}: ${peso(amount)}`),
+        .map(([name, amount]) => `${name} cash advance: ${peso(amount)}`),
       ...(row.Other_Expenses_Remark ? [`Other expenses: ${row.Other_Expenses_Remark}`] : []),
       `Expenses: ${peso(totals.expenses)}`,
       `Added cash: ${peso(totals.addedCash)}`,
@@ -474,7 +474,7 @@ export default function SalesPage() {
                 </div>
                 {!!staffNames.length && (
                   <div className="mt-6 border-t border-slate-100 pt-5">
-                    <h3 className="mb-3 text-sm font-semibold text-slate-700">Staff payouts</h3>
+                    <h3 className="mb-3 text-sm font-semibold text-slate-700">Staff cash advances</h3>
                     <div className="grid gap-4 sm:grid-cols-2">
                       {staffNames.map((name) => (
                         <MoneyField

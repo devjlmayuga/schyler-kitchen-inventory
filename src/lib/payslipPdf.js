@@ -65,8 +65,8 @@ export function buildPayslipPdf(payslip) {
     text(value, x + 12, 157, 16, true);
   });
 
-  const columns = [MARGIN, 126, 184, 267, 355, 453, PAGE_WIDTH - MARGIN];
-  const headers = ['Date', 'Duty', 'Base pay', 'Quota bonus', 'Overtime', 'Total'];
+  const columns = [MARGIN, 111, 150, 218, 292, 360, 438, PAGE_WIDTH - MARGIN];
+  const headers = ['Date', 'Duty', 'Base', 'Quota', 'OT', 'Cash advance', 'Net pay'];
   fill(MARGIN, 190, PAGE_WIDTH - MARGIN * 2, 28, '0.95 0.96 0.98');
   headers.forEach((header, index) => text(header, columns[index] + 7, 208, 7.5, true, '0.29 0.35 0.44'));
   days.forEach((day, row) => {
@@ -78,10 +78,11 @@ export function buildPayslipPdf(payslip) {
       amount(day.base),
       day.quotaHit ? amount(day.bonus) : '-',
       day.overtimeHours ? `${amount(day.overtime)}` : '-',
-      amount(day.total),
+      day.cashAdvance ? `-${amount(day.cashAdvance)}` : '-',
+      amount(day.net),
     ];
     values.forEach((value, index) =>
-      text(value, columns[index] + 7, top + 23, index === 4 ? 7.2 : 7.8, index === 5),
+      text(value, columns[index] + 5, top + 23, index >= 4 ? 6.7 : 7.4, index === 6),
     );
     line(MARGIN, top + 39, PAGE_WIDTH - MARGIN, top + 39);
   });
@@ -96,19 +97,23 @@ export function buildPayslipPdf(payslip) {
     text(label, 340, summaryTop + 27 + index * 25, 9);
     right(amount(value), PAGE_WIDTH - MARGIN, summaryTop + 27 + index * 25, 9);
   });
-  line(340, summaryTop + 91, PAGE_WIDTH - MARGIN, summaryTop + 91, 1.5, '0.12 0.16 0.23');
-  text('Total earnings', 340, summaryTop + 116, 11, true);
-  right(amount(totals.total), PAGE_WIDTH - MARGIN, summaryTop + 116, 11, true);
+  text('Gross earnings', 340, summaryTop + 102, 9);
+  right(amount(totals.total), PAGE_WIDTH - MARGIN, summaryTop + 102, 9);
+  text('Cash advances', 340, summaryTop + 127, 9);
+  right(`-${amount(totals.cashAdvances)}`, PAGE_WIDTH - MARGIN, summaryTop + 127, 9);
+  line(340, summaryTop + 141, PAGE_WIDTH - MARGIN, summaryTop + 141, 1.5, '0.12 0.16 0.23');
+  text('Net pay', 340, summaryTop + 166, 11, true);
+  right(amount(totals.net), PAGE_WIDTH - MARGIN, summaryTop + 166, 11, true);
 
   text(
     'Quota bonuses apply on duty days when shop sales exceed the saved daily target.',
     MARGIN,
-    674,
+    704,
     8,
     false,
     '0.39 0.45 0.55',
   );
-  text('Amounts shown are earnings before any deductions.', MARGIN, 688, 8, false, '0.39 0.45 0.55');
+  text('Monday-Saturday staff payouts are cash advances; Sunday pays the prior week.', MARGIN, 718, 8, false, '0.39 0.45 0.55');
   line(MARGIN, 748, 235, 748, 0.7, '0.39 0.45 0.55');
   line(360, 748, PAGE_WIDTH - MARGIN, 748, 0.7, '0.39 0.45 0.55');
   text('Prepared by', MARGIN, 765, 8, false, '0.39 0.45 0.55');

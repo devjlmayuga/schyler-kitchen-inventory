@@ -272,6 +272,9 @@ export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   const result = await dbClient().query(`select
     (select value from schyler_kitchen.app_config where key='sales_config') config,
     coalesce((select jsonb_object_agg(business_date::text,takoyaki_sales) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'{}'::jsonb) sales_by_date,
+    coalesce((select jsonb_object_agg(business_date::text,coalesce(raw_row->>'Product_Sales_JSON','')) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'{}'::jsonb) product_sales_by_date,
+    coalesce((select jsonb_agg(jsonb_build_object('Category',category,'Name',name,'Price',price) order by id) from schyler_kitchen.product_catalog),'[]'::jsonb) products,
+    coalesce((select jsonb_object_agg(business_date::text,coalesce(raw_row->>'Staff_Expenses_JSON','')) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'{}'::jsonb) staff_expenses_by_date,
     coalesce((select jsonb_agg(jsonb_build_object('date',a.business_date::text,'staff',s.display_name,'scheduled',a.scheduled,'onDuty',a.on_duty,'overtimeHours',a.overtime_hours,'rates',a.pay_rates)) from schyler_kitchen.attendance a join schyler_kitchen.staff_members s on s.id=a.staff_id where a.business_date between $1::date and $2::date),'[]'::jsonb) manual_records,
     coalesce((select jsonb_agg(business_date::text order by business_date) from schyler_kitchen.sales_ledgers where business_date between $1::date and $2::date),'[]'::jsonb) open_dates,
     coalesce((select jsonb_agg(jsonb_build_object('date',business_date,'staff',staff) order by business_date,staff) from (
@@ -284,7 +287,7 @@ export async function getAutoAttendanceWeek(weekStart, weekEnd) {
   if (typeof config === 'string') {
     try { config = JSON.parse(config); } catch { config = null; }
   }
-  return { config, openDates: data.open_dates || [], faceRecords: data.face_records || [], manualRecords: data.manual_records || [], salesByDate: data.sales_by_date || {} };
+  return { config, products: data.products || [], openDates: data.open_dates || [], faceRecords: data.face_records || [], manualRecords: data.manual_records || [], salesByDate: data.sales_by_date || {}, productSalesByDate: data.product_sales_by_date || {}, staffExpensesByDate: data.staff_expenses_by_date || {} };
 }
 
 export async function saveFaceProfile(staff, descriptorCiphertext) {

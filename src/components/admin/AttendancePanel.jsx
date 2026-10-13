@@ -12,7 +12,7 @@ import AttendanceDaysModal from './AttendanceDaysModal.jsx';
 import { apiGet, apiPost } from '../../lib/apiClient.js';
 import { isoDateToday } from '../../lib/dates.js';
 import { addDays, weekStart } from '../../lib/admin.js';
-import { buildPayslip, normalizeAttendance, normalizePayroll, staffRate } from '../../lib/payroll.js';
+import { buildPayslip, normalizeAttendance, normalizePayroll, quotaSalesForDate, staffRate } from '../../lib/payroll.js';
 import { peso } from '../../lib/sales.js';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -35,6 +35,8 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
   const [saved, setSaved] = useState([]);
   const [payroll, setPayroll] = useState(normalizePayroll());
   const [salesByDate, setSalesByDate] = useState({});
+  const [categorySalesByDate, setCategorySalesByDate] = useState({});
+  const [cashAdvances, setCashAdvances] = useState([]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,14 +65,14 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
         items: Object.fromEntries(
           [...new Set(records.map((record) => record.staff))].map((name) => [
             name,
-            buildPayslip(name, week, records, salesByDate, payroll),
+            buildPayslip(name, week, records, salesByDate, payroll, cashAdvances, categorySalesByDate),
           ]),
         ),
       };
     } catch (reason) {
       return { items: {}, error: reason.message };
     }
-  }, [records, week, salesByDate, payroll]);
+  }, [records, week, salesByDate, payroll, cashAdvances, categorySalesByDate]);
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -108,6 +110,8 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
       setSaved(entries);
       setPayroll(normalizePayroll(data.payroll || settings.config?.payroll));
       setSalesByDate(data.salesByDate || {});
+      setCategorySalesByDate(data.categorySalesByDate || {});
+      setCashAdvances(Array.isArray(data.cashAdvances) ? data.cashAdvances : []);
       setEvents(
         [...(eventData.events || [])].sort((a, b) =>
           String(b.event_time).localeCompare(String(a.event_time)),
@@ -237,7 +241,8 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
               </h3>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">
                 Set each staff member's schedule for this week, then record actual duty and overtime. Quota:
-                daily sales above {peso(payroll.quotaTarget)}.
+                eligible sales above {peso(payroll.quotaTarget)} ·{' '}
+                {payroll.quotaCategories.length ? payroll.quotaCategories.join(', ') : 'all categories'}.
               </p>
             </div>
             {names.length ? (
@@ -359,7 +364,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                         record.staff === selected
                           ? {
                               ...record,
-                              rates: { ...staffRate(payroll, selected), quotaTarget: payroll.quotaTarget },
+                              rates: { ...staffRate(payroll, selected), quotaTarget: payroll.quotaTarget, quotaCategories: payroll.quotaCategories },
                             }
                           : record,
                       ),
@@ -377,8 +382,10 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                   const rate = record.rates || {
                     ...staffRate(payroll, selected),
                     quotaTarget: payroll.quotaTarget,
+                    quotaCategories: payroll.quotaCategories,
                   };
-                  const quotaHit = record.onDuty && Number(salesByDate[date] || 0) > rate.quotaTarget;
+                  const eligibleSales = quotaSalesForDate(date, rate, salesByDate, categorySalesByDate);
+                  const quotaHit = record.onDuty && eligibleSales > rate.quotaTarget;
                   return (
                     <div
                       key={date}
@@ -422,7 +429,7 @@ export default function AttendancePanel({ onOpenSettings, onDirtyChange, onBusyC
                         On duty
                       </label>
                       <div className="text-xs text-slate-500">
-                        <p>Shop sales {peso(salesByDate[date])}</p>
+                        <p>Quota-eligible sales {peso(eligibleSales)}</p>
                         <p className={`mt-1 ${quotaHit ? 'font-semibold text-[var(--p-4)]' : ''}`}>
                           {quotaHit ? `Quota hit · +${peso(rate.quotaBonus)}` : 'No quota bonus'}
                         </p>

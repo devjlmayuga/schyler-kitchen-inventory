@@ -1,6 +1,6 @@
 import { addDays } from './admin.js';
 
-export const DEFAULT_PAYROLL = { quotaTarget: 4000, staffRates: {} };
+export const DEFAULT_PAYROLL = { quotaTarget: 4000, quotaCategories: [], staffRates: {} };
 export const DEFAULT_STAFF_RATE = { dailyRate: null, quotaBonus: 50, otRate: 50 };
 const money = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -17,8 +17,12 @@ function amount(value, label, nullable = false) {
 
 export function normalizePayroll(value = {}) {
   const config = value || {};
+  const quotaCategories = Array.isArray(config.quotaCategories)
+    ? [...new Set(config.quotaCategories.map((category) => String(category || '').trim()).filter(Boolean))]
+    : [];
   return {
     quotaTarget: amount(config.quotaTarget ?? 4000, 'Sales quota'),
+    quotaCategories,
     staffRates: Object.fromEntries(
       Object.entries(config.staffRates || {}).map(([name, rate]) => [
         name,
@@ -60,6 +64,9 @@ export function normalizeAttendance(records, start, payroll) {
       quotaBonus: amount(rate.quotaBonus, `${staff}: quota bonus`),
       otRate: amount(rate.otRate, `${staff}: OT rate`),
       quotaTarget: amount(rate.quotaTarget, 'Sales quota'),
+      quotaCategories: Array.isArray(rate.quotaCategories)
+        ? [...new Set(rate.quotaCategories.map((category) => String(category || '').trim()).filter(Boolean))]
+        : [...payroll.quotaCategories],
     };
     if (record.scheduled != null && typeof record.scheduled !== 'boolean')
       throw new Error('Scheduled must be true or false.');
@@ -74,7 +81,14 @@ export function normalizeAttendance(records, start, payroll) {
   });
 }
 
-export function buildPayslip(name, start, records, salesByDate, payroll) {
+export function quotaSalesForDate(date, rates, salesByDate, categorySalesByDate = {}) {
+  const categories = Array.isArray(rates?.quotaCategories) ? rates.quotaCategories : [];
+  if (!categories.length) return Number(salesByDate[date] || 0);
+  const values = categorySalesByDate[date] || {};
+  return money(categories.reduce((sum, category) => sum + Number(values[category] || 0), 0));
+}
+
+export function buildPayslip(name, start, records, salesByDate, payroll, cashAdvances = [], categorySalesByDate = {}) {
   const normalized = normalizeAttendance(
     records.filter((row) => row.staff === name),
     start,
@@ -83,14 +97,23 @@ export function buildPayslip(name, start, records, salesByDate, payroll) {
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDays(start, index);
     const record = normalized.find((row) => row.date === date);
-    const rates = record?.rates || { ...staffRate(payroll, name), quotaTarget: payroll.quotaTarget };
+    const rates = record?.rates || { ...staffRate(payroll, name), quotaTarget: payroll.quotaTarget, quotaCategories: payroll.quotaCategories };
     const onDuty = !!record?.onDuty;
-    const sales = Number(salesByDate[date] || 0);
+    const sales = quotaSalesForDate(date, rates, salesByDate, categorySalesByDate);
     const quotaHit = onDuty && sales > rates.quotaTarget;
     const overtimeHours = onDuty ? record?.overtimeHours || 0 : 0;
     const base = onDuty ? rates.dailyRate || 0 : 0;
     const bonus = quotaHit ? rates.quotaBonus : 0;
     const overtime = money(overtimeHours * rates.otRate);
+    const isSunday = new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
+    const cashAdvance = money(
+      isSunday
+        ? 0
+        : cashAdvances
+            .filter((entry) => entry.staff === name && entry.date === date)
+            .reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+    );
+    const total = money(base + bonus + overtime);
     return {
       date,
       onDuty,
@@ -101,7 +124,9 @@ export function buildPayslip(name, start, records, salesByDate, payroll) {
       base,
       bonus,
       overtime,
-      total: money(base + bonus + overtime),
+      cashAdvance,
+      total,
+      net: money(total - cashAdvance),
     };
   });
   const totals = days.reduce(
@@ -112,9 +137,11 @@ export function buildPayslip(name, start, records, salesByDate, payroll) {
       base: money(sum.base + day.base),
       bonus: money(sum.bonus + day.bonus),
       overtime: money(sum.overtime + day.overtime),
+      cashAdvances: money(sum.cashAdvances + day.cashAdvance),
       total: money(sum.total + day.total),
+      net: money(sum.net + day.net),
     }),
-    { days: 0, quotaDays: 0, overtimeHours: 0, base: 0, bonus: 0, overtime: 0, total: 0 },
+    { days: 0, quotaDays: 0, overtimeHours: 0, base: 0, bonus: 0, overtime: 0, cashAdvances: 0, total: 0, net: 0 },
   );
   return {
     staff: name,
