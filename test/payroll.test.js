@@ -32,18 +32,18 @@ test('quota is strictly above 4000, applies only on duty, and fractional OT pays
   assert.equal(slip.missingRate, false);
 });
 
-test('dated staff cash advances are deducted except Sunday payroll payments', () => {
+test('dated staff cash advances from daily sales are deducted on every day of the payroll week', () => {
   const slip = buildPayslip('Ana', start, records, sales, payroll, [
     { staff: 'Ana', date: start, amount: 100 },
     { staff: 'Ana', date: '2026-09-21', amount: 50 },
     { staff: 'Bea', date: start, amount: 999 },
   ]);
-  assert.equal(slip.days[0].cashAdvance, 0, 'Sunday payment belongs to the previous payroll week');
-  assert.equal(slip.days[0].net, 475);
+  assert.equal(slip.days[0].cashAdvance, 100);
+  assert.equal(slip.days[0].net, 375);
   assert.equal(slip.days[1].cashAdvance, 50);
-  assert.equal(slip.totals.cashAdvances, 50);
+  assert.equal(slip.totals.cashAdvances, 150);
   assert.equal(slip.totals.total, 1025);
-  assert.equal(slip.totals.net, 975);
+  assert.equal(slip.totals.net, 875);
 });
 
 test('each on-duty staff member earns their configured daily, quota and overtime rates', () => {

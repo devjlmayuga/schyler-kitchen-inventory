@@ -105,13 +105,10 @@ export function buildPayslip(name, start, records, salesByDate, payroll, cashAdv
     const base = onDuty ? rates.dailyRate || 0 : 0;
     const bonus = quotaHit ? rates.quotaBonus : 0;
     const overtime = money(overtimeHours * rates.otRate);
-    const isSunday = new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
     const cashAdvance = money(
-      isSunday
-        ? 0
-        : cashAdvances
-            .filter((entry) => entry.staff === name && entry.date === date)
-            .reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+      cashAdvances
+        .filter((entry) => entry.staff === name && entry.date === date)
+        .reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
     );
     const total = money(base + bonus + overtime);
     return {

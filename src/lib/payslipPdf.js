@@ -113,7 +113,7 @@ export function buildPayslipPdf(payslip) {
     false,
     '0.39 0.45 0.55',
   );
-  text('Monday-Saturday staff payouts are cash advances; Sunday pays the prior week.', MARGIN, 718, 8, false, '0.39 0.45 0.55');
+  text('Staff cash advances recorded in daily sales are deducted on their recorded date.', MARGIN, 718, 8, false, '0.39 0.45 0.55');
   line(MARGIN, 748, 235, 748, 0.7, '0.39 0.45 0.55');
   line(360, 748, PAGE_WIDTH - MARGIN, 748, 0.7, '0.39 0.45 0.55');
   text('Prepared by', MARGIN, 765, 8, false, '0.39 0.45 0.55');

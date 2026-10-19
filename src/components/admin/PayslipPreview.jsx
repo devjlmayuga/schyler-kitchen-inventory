@@ -123,8 +123,7 @@ export default function PayslipPreview({ payslip, onClose }) {
           </dl>
           <p className="mt-6 text-xs leading-relaxed text-slate-500">
             Quota bonuses apply on duty days when eligible sales exceed the saved daily target. Dated staff
-            payouts recorded Monday–Saturday are deducted as cash advances; Sunday payments belong to the
-            previous payroll week.
+            staff cash advances recorded in daily sales are deducted on their recorded date.
           </p>
           <div className="mt-14 grid grid-cols-2 gap-10 text-xs text-slate-600">
             <div className="border-t border-slate-400 pt-2">Prepared by</div>
