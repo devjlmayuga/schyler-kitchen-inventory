@@ -4,6 +4,7 @@ import {
   authLogin,
   attendanceListWeek,
   attendanceSaveWeek,
+  inventoryConsumption,
   inventoryDeleteDay,
   inventoryGet,
   inventoryGetOrSeed,
@@ -106,6 +107,11 @@ async function dispatchActionInternal({ action, token, session, payload }) {
       await requireAuth({ token, session });
       const date = String(payload?.date || '');
       return await inventoryGet({ date });
+    }
+    case 'inventory.consumption': {
+      const ctx = await requireAuth({ token, session });
+      requireAdmin(ctx);
+      return await inventoryConsumption({ from: String(payload?.from || ''), to: String(payload?.to || '') });
     }
     case 'inventory.getOrSeed': {
       await requireAuth({ token, session });

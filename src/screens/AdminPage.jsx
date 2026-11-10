@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart3, Package, Settings2, Users, UtensilsCrossed } from 'lucide-react';
+import { BarChart3, ClipboardList, Package, Settings2, Users, UtensilsCrossed } from 'lucide-react';
 import ReportsPanel from '../components/admin/ReportsPanel.jsx';
+import InventoryUsagePanel from '../components/admin/InventoryUsagePanel.jsx';
 import CatalogSettings from '../components/admin/CatalogSettings.jsx';
 import SalesSettings from '../components/admin/SalesSettings.jsx';
 import AttendancePanel from '../components/admin/AttendancePanel.jsx';
@@ -10,6 +11,7 @@ import useUnsavedChanges from '../lib/useUnsavedChanges.js';
 
 const sections = [
   { key: 'overview', label: 'Overview', icon: BarChart3 },
+  { key: 'usage', label: 'Inventory usage', icon: ClipboardList },
   { key: 'items', label: 'Inventory items', icon: Package },
   { key: 'products', label: 'Menu products', icon: UtensilsCrossed },
   { key: 'attendance', label: 'Attendance', icon: Users },
@@ -66,6 +68,7 @@ export default function AdminPage() {
         </select>
       </label>
       {section === 'overview' && <ReportsPanel />}
+      {section === 'usage' && <InventoryUsagePanel />}
       {(section === 'items' || section === 'products') && (
         <CatalogSettings key={section} kind={section} onDirtyChange={setDirty} onBusyChange={setBusy} />
       )}

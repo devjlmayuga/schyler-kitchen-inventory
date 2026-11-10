@@ -68,7 +68,9 @@ Browser support references: [Chrome Web Bluetooth](https://developer.chrome.com/
 
 Needs shows stock to replenish for the selected date, plus a checklist for other supplies. Check off supplies as they are picked up, use **Undo** to restore the most recently completed item, or copy the shopping list. Stock alerts clear after updating inventory; each stock item links to its inventory entry on the selected date.
 
-Admin separates **Overview**, **Inventory items**, **Menu products**, **Attendance**, and **Sales settings**. Item, menu, and settings edits are applied with the save bar. New catalog entries are added to the list before saving. Turn off a product's **Available** checkbox to hide it from new orders. Permanent deletion remains in each item's actions menu.
+Admin separates **Overview**, **Inventory usage**, **Inventory items**, **Menu products**, **Attendance**, and **Sales settings**. Item, menu, and settings edits are applied with the save bar. New catalog entries are added to the list before saving. Turn off a product's **Available** checkbox to hide it from new orders. Permanent deletion remains in each item's actions menu.
+
+**Inventory usage** totals the quantity recorded as used for every inventory item between the selected dates and is available to admins only.
 
 Reports include the full selected date range, with monthly chart totals for ranges longer than 31 days. Detailed daily figures and all product quantities can be expanded. Attendance shows weekly status and clock activity; camera enrollment and check-in controls open only when **Manage face attendance** is selected.
 

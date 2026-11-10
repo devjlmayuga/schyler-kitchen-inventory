@@ -42,7 +42,7 @@ export async function assertSchemaVersion(client = dbClient()) {
 
 export async function withTransaction(action, operation) {
   if (transactions.getStore()) return operation();
-  const reads = new Set(['auth.me','auth.login','attendance.listWeek','face.profiles','face.eventsWeek','inventory.get','inventory.getOrSeed','inventory.seedTemplate','salesFinance.list','salesFinance.getByDate','needs.list','thresholds.get','items.list','products.list','salesConfig.get','sales.bootstrap','pos.bootstrap','pos.orders','pos.order','debug.auth']);
+  const reads = new Set(['auth.me','auth.login','attendance.listWeek','face.profiles','face.eventsWeek','inventory.consumption','inventory.get','inventory.getOrSeed','inventory.seedTemplate','salesFinance.list','salesFinance.getByDate','needs.list','thresholds.get','items.list','products.list','salesConfig.get','sales.bootstrap','pos.bootstrap','pos.orders','pos.order','debug.auth']);
   if (reads.has(action)) {
     await assertSchemaVersion(getPool());
     return operation();

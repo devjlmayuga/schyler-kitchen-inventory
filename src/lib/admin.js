@@ -1,4 +1,5 @@
 import { parseMoney } from './money.js';
+import { parseQty } from './numbers.js';
 
 export function addDays(date, amount) {
   const value = new Date(`${date}T00:00:00Z`);
@@ -68,6 +69,28 @@ export function buildReport(rows, from, to) {
     });
   }
   return { daily, totals, products, chart, monthly };
+}
+
+export function buildConsumptionReport(rows, from, to) {
+  const items = new Map();
+  const daysWithUsage = new Set();
+  for (const row of rows) {
+    const date = String(row.Date || '').slice(0, 10);
+    const used = parseQty(row.Out_Stock);
+    if (!date || date < from || date > to || used <= 0) continue;
+    daysWithUsage.add(date);
+    const item = items.get(row.Product) || { product: row.Product, unit: '', used: 0, days: 0 };
+    item.used = Math.round((item.used + used) * 1000) / 1000;
+    item.days += 1;
+    item.unit = row.Unit || item.unit;
+    items.set(row.Product, item);
+  }
+  const totalDays = Math.round((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / 86400000) + 1;
+  return {
+    items: [...items.values()].sort((a, b) => a.product.localeCompare(b.product)),
+    daysWithUsage: daysWithUsage.size,
+    totalDays,
+  };
 }
 
 export function normalizeCatalog(rows, kind) {

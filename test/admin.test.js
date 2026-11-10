@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, buildReport, nextExpenseKey, normalizeCatalog, weekStart } from '../src/lib/admin.js';
+import { addDays, buildConsumptionReport, buildReport, nextExpenseKey, normalizeCatalog, weekStart } from '../src/lib/admin.js';
 
 test('reports retain all sales beyond 62 days and group long ranges by month', () => {
   const rows = Array.from({ length: 100 }, (_, index) => ({
@@ -72,4 +72,29 @@ test('attendance weeks start on Sunday and cross month/year boundaries correctly
   assert.equal(weekStart('2026-01-01'), '2025-12-28');
   assert.equal(weekStart('2026-09-27'), '2026-09-27');
   assert.equal(addDays('2024-02-28', 1), '2024-02-29');
+});
+
+test('consumption report totals each used item within the selected dates only', () => {
+  const result = buildConsumptionReport(
+    [
+      { Date: '2026-10-31', Product: 'Single Box', Unit: 'pieces', Out_Stock: 900 },
+      { Date: '2026-11-01', Product: 'Single Box', Unit: 'pcs', Out_Stock: '10' },
+      { Date: '2026-11-02', Product: 'Single Box', Unit: 'pieces', Out_Stock: 5.5 },
+      { Date: '2026-11-02', Product: 'Flour', Unit: 'kg', Out_Stock: 0.1 },
+      { Date: '2026-11-03', Product: 'Flour', Unit: 'kg', Out_Stock: 0.2 },
+      { Date: '2026-11-03', Product: 'Barkada Box', Unit: 'pieces', Out_Stock: 0 },
+      { Date: '2026-11-04', Product: 'Double Box', Unit: 'pieces', Out_Stock: 0 },
+      { Date: '2026-11-06', Product: 'Double Box', Unit: 'pieces', Out_Stock: 7 },
+    ],
+    '2026-11-01',
+    '2026-11-05',
+  );
+  assert.deepEqual(result, {
+    items: [
+      { product: 'Flour', unit: 'kg', used: 0.3, days: 2 },
+      { product: 'Single Box', unit: 'pieces', used: 15.5, days: 2 },
+    ],
+    daysWithUsage: 3,
+    totalDays: 5,
+  });
 });

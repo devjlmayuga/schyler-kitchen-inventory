@@ -67,6 +67,9 @@ test('existing business actions run through PostgreSQL', { skip: !databaseUrl },
   const inventory = await call('inventory.get', { date: '2099-01-02' });
   assert.equal(inventory.items.length, 1);
   assert.equal(inventory.items[0].Closing_Qty, 4);
+  const consumption = await call('inventory.consumption', { from: '2099-01-01', to: '2099-01-03' });
+  assert.deepEqual(consumption.rows.map((row) => [row.Date, row.Product, row.Out_Stock]), [['2099-01-02', sample.Product, 1]]);
+  assert.equal((await call('inventory.consumption', { from: '2099-01-03', to: '2099-01-04' })).rows.length, 0);
   const existingInventory = await call('inventory.getOrSeed', { date: '2099-01-02' });
   assert.equal(existingInventory.seeded, false);
   assert.equal(existingInventory.items.length, 1);

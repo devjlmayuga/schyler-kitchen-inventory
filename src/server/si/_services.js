@@ -534,6 +534,15 @@ function normalizeInventoryHistoryRow(r) {
   return out;
 }
 
+export async function inventoryConsumption({ from, to }) {
+  if (!isIsoDate(from) || !isIsoDate(to)) throw new Error('from and to are required (YYYY-MM-DD)');
+  if (from > to) throw new Error('Bad request: from must be on or before to');
+  await ensureInventoryHistorySheet();
+  const history = await readSheetAsObjects(SHEET_INV_HISTORY, { from, to });
+  assertHeaders(SHEET_INV_HISTORY, history.headers, ['Date', 'Product']);
+  return { from, to, rows: history.values.map((r) => normalizeInventoryHistoryRow(r)) };
+}
+
 export async function inventoryGet({ date }) {
   if (!isIsoDate(date)) throw new Error('date is required (YYYY-MM-DD)');
   await ensureInventoryHistorySheet();
